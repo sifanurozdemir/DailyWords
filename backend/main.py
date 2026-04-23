@@ -20,6 +20,11 @@ from database import engine, SessionLocal
 import services.acoustic_analysis as aa
 from datetime import datetime, timedelta, date
 from sqlalchemy import text
+import google.generativeai as genai
+import json
+
+
+
 
 # --- SİSTEM AYARLARI ---
 os.environ['PHONEMIZER_ESPEAK_LIBRARY'] = r'C:\Program Files\eSpeak NG\libespeak-ng.dll'
@@ -37,6 +42,20 @@ except Exception:
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN last_study_date TIMESTAMP"))
+        if hasattr(conn, 'commit'): conn.commit()
+except Exception:
+    pass
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN xp INTEGER DEFAULT 0"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN highest_combo INTEGER DEFAULT 0"))
+        if hasattr(conn, 'commit'): conn.commit()
+except Exception:
+    pass
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN penalty_total_xp INTEGER DEFAULT 0"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN penalty_high_score INTEGER DEFAULT 0"))
         if hasattr(conn, 'commit'): conn.commit()
 except Exception:
     pass
@@ -160,6 +179,12 @@ def login(request: AuthRequest, db: Session = Depends(get_db)):
         "username": user.username,
         "current_level": user.current_level,
         "daily_goal": user.daily_goal,
+        "xp": user.xp or 0,
+        "highest_combo": user.highest_combo or 0,
+        "penalty_total_xp": user.penalty_total_xp or 0,
+        "penalty_high_score": user.penalty_high_score or 0,
+        "bug_hunt_total_xp": user.bug_hunt_total_xp or 0,
+        "bug_hunt_high_score": user.bug_hunt_high_score or 0,
         "needs_placement_test": user.current_level is None
     }
 
@@ -206,10 +231,32 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "current_level": user.current_level,
         "daily_goal": user.daily_goal,
         "streak_count": user.streak_count,
+        "xp": user.xp or 0,
+        "highest_combo": user.highest_combo or 0,
+        "penalty_total_xp": user.penalty_total_xp or 0,
+        "penalty_high_score": user.penalty_high_score or 0,
+        "bug_hunt_total_xp": user.bug_hunt_total_xp or 0,
+        "bug_hunt_high_score": user.bug_hunt_high_score or 0,
         "needs_placement_test": user.current_level is None
     }
 
 # --- KELİME VE TEST SİSTEMİ ---
+
+@app.post("/update-bughunt-stats/{user_id}")
+def update_bughunt_stats(user_id: int, score: int, earned_xp: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    
+    # Update high score
+    if score > (user.bug_hunt_high_score or 0):
+        user.bug_hunt_high_score = score
+        
+    # Add XP
+    user.bug_hunt_total_xp = (user.bug_hunt_total_xp or 0) + earned_xp
+    
+    db.commit()
+    return {"status": "success", "bug_hunt_high_score": user.bug_hunt_high_score, "bug_hunt_total_xp": user.bug_hunt_total_xp}
 
 @app.get("/get-test-questions")
 def get_test_questions(db: Session = Depends(get_db)):
@@ -222,7 +269,6 @@ def get_test_questions(db: Session = Depends(get_db)):
         
         for word in words:
             # --- DÜZELTME: EZBER BOZAN SEVİYE MANTIĞI ---
-            # Sadece A1 seviyesindekilere Türkçe sor, A2 ve üzeri için İngilizce Tanım (Definition) kullan!
             is_advanced = level != "A1" 
             
             if is_advanced and word.definition_en:
@@ -232,24 +278,26 @@ def get_test_questions(db: Session = Depends(get_db)):
                 correct_text = word.meaning_tr or "Anlamı"
                 target_attr = "meaning_tr"
 
-            # Yanlış şık için aynı seviyeden başka bir kelime seçimi
-            wrong_word = db.query(models.Word).filter(
+            # --- YENİ: 2 ADET YANLIŞ ŞIK SEÇİMİ ---
+            wrong_words = db.query(models.Word).filter(
                 models.Word.cefr_level == level, 
                 models.Word.id != word.id
-            ).order_by(func.random()).first()
+            ).order_by(func.random()).limit(2).all() # 1 yerine 2 kelime çekiyoruz
             
-            wrong_text = "Bilinmiyor"
-            if wrong_word:
-                # Doğru şıkkın türü neyse (Türkçe veya İngilizce Tanım), yanlış şıkkı da aynı türde çekiyoruz
-                wrong_text = getattr(wrong_word, target_attr)
-                # Eğer veritabanında İngilizce tanım eksikse (fallback), Türkçesine düş ki program çökmesin
-                if not wrong_text: 
-                    wrong_text = wrong_word.meaning_tr or "Yanlış Şık"
+            options = [{"text": correct_text, "is_correct": True}]
 
-            options = [
-                {"text": correct_text, "is_correct": True},
-                {"text": wrong_text, "is_correct": False}
-            ]
+            for w_word in wrong_words:
+                w_text = getattr(w_word, target_attr)
+                # Eğer hedef öznitelik (tanım veya anlam) boşsa fallback yapıyoruz
+                if not w_text:
+                    w_text = w_word.meaning_tr or "Yanlış Şık"
+                
+                options.append({"text": w_text, "is_correct": False})
+
+            # Eğer veritabanında yeterli kelime yoksa ve 3 şık oluşmadıysa yedek ekle
+            while len(options) < 3:
+                options.append({"text": "None of the above", "is_correct": False})
+
             random.shuffle(options)
             
             questions.append({
@@ -499,34 +547,44 @@ def get_review_question(word_id: int, user_id: int, db: Session = Depends(get_db
     if not word:
         raise HTTPException(status_code=404, detail="Kelime bulunamadi.")
 
-    valid_types = ["meaning", "synonym", "usage"]
-    
-    # DÜZELTME 2: Veritabanındaki "word_type" sütununu kullanarak mantıklı soruları geri getirdik!
-    # Eğer kelimenin türü veritabanında "verb" (fiil) olarak kayıtlıysa, gramer sorularını sor:
-    if hasattr(word, 'word_type') and word.word_type and "verb" in word.word_type.lower():
-        valid_types.extend(["past", "future"])
-
-    # TODO: OpenAI bağlandığında prompt formatına word_type eklendi
-    # prompt = AI_SYSTEM_PROMPT.format(cefr_level=word.cefr_level, word_en=word.word_en, meaning_tr=word.meaning_tr, word_type=word.word_type)
-    # return json.loads(response.choices[0].message.content)
+    valid_types = ["meaning"]
+    if word.example_en and word.word_en.lower() in word.example_en.lower():
+        valid_types.extend(["fill_in", "usage"])
 
     q_type = random.choice(valid_types)
-    template = QUESTION_TEMPLATES[q_type]
-    question_text = template["question"].replace("{word}", word.word_en)
-    hint = template["hint"].replace("{word}", word.word_en)
 
     wrong_words = db.query(models.Word).filter(
         models.Word.cefr_level == word.cefr_level,
         models.Word.id != word.id
     ).order_by(func.random()).limit(3).all()
 
-    if q_type == "usage":
-        correct_answer = word.example_en or f"She always uses the word {word.word_en.lower()} carefully."
-        wrong_answers = [w.example_en or f"He did {w.word_en.lower()} yesterday." for w in wrong_words]
-    else:
-        correct_answer = word.meaning_tr or word.word_en
-        # DÜZELTME 3: Şıkların tutarsızlığını önlemek için yanlış şıklar her zaman anlamlı çekilir
-        wrong_answers = [w.meaning_tr or w.word_en for w in wrong_words]
+    if q_type == "meaning":
+        question_text = f"'{word.word_en}' kelimesinin Türkçe karşılığı aşağıdakilerden hangisidir?"
+        hint = f"İpucu: Bu kelimenin kullanımı: {word.example_en}" if word.example_en else "İpucu: Harflerine odaklan."
+        correct_answer = word.meaning_tr
+        wrong_answers = [w.meaning_tr for w in wrong_words]
+        
+    elif q_type == "fill_in":
+        import re
+        blank_sentence = re.sub(rf"(?i)\b{re.escape(word.word_en)}\b", "______", word.example_en)
+        question_text = f"Aşağıdaki cümlede boşluğa gelmesi gereken kelime hangisidir?\n\n\"{blank_sentence}\""
+        hint = f"İpucu: Cümlenin anlamı ile Türkçe karşılığını düşün ({word.meaning_tr})."
+        correct_answer = word.word_en
+        wrong_answers = [w.word_en for w in wrong_words]
+
+    elif q_type == "usage":
+        question_text = f"Aşağıdaki cümlelerden hangisi '{word.word_en}' ({word.meaning_tr}) kelimesinin doğru kullanımıdır?"
+        hint = "İpucu: Kelimenin cümleye gramer ve anlam olarak oturduğundan emin ol."
+        correct_answer = word.example_en
+        
+        import re
+        wrong_answers = []
+        for w in wrong_words:
+            if w.example_en and w.word_en.lower() in w.example_en.lower():
+                nonsense_sentence = re.sub(rf"(?i)\b{re.escape(w.word_en)}\b", word.word_en.lower(), w.example_en)
+                wrong_answers.append(nonsense_sentence)
+            else:
+                wrong_answers.append(f"He is very {word.word_en.lower()} yesterday.")
 
     options = [{"text": correct_answer, "is_correct": True}] + [{"text": w, "is_correct": False} for w in wrong_answers[:3]]
     random.shuffle(options)
@@ -604,6 +662,50 @@ def update_streak(user_id: int, db: Session = Depends(get_db)):
     db.refresh(user)
     
     return {"status": "success", "streak": user.streak_count}
+
+class GameStatsRequest(BaseModel):
+    xp_earned: int
+    combo_reached: int
+
+@app.post("/update-game-stats/{user_id}")
+def update_game_stats(user_id: int, stats: GameStatsRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    
+    if user.xp is None: user.xp = 0
+    if user.highest_combo is None: user.highest_combo = 0
+
+    user.xp += stats.xp_earned
+    if stats.combo_reached > user.highest_combo:
+        user.highest_combo = stats.combo_reached
+        
+    db.commit()
+    db.refresh(user)
+    
+    return {"status": "success", "xp": user.xp, "highest_combo": user.highest_combo}
+
+class PenaltyStatsRequest(BaseModel):
+    xp_earned: int
+    score_reached: int
+
+@app.post("/update-penalty-stats/{user_id}")
+def update_penalty_stats(user_id: int, stats: PenaltyStatsRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    
+    if user.penalty_total_xp is None: user.penalty_total_xp = 0
+    if user.penalty_high_score is None: user.penalty_high_score = 0
+
+    user.penalty_total_xp += stats.xp_earned
+    if stats.score_reached > user.penalty_high_score:
+        user.penalty_high_score = stats.score_reached
+        
+    db.commit()
+    db.refresh(user)
+    
+    return {"status": "success", "penalty_total_xp": user.penalty_total_xp, "penalty_high_score": user.penalty_high_score}
 
 # --- SES ANALİZ ENDPOINT'İ ---
 
@@ -686,3 +788,68 @@ async def analyze_speech(word_en: str, file: UploadFile = File(...), db: Session
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
+
+# --- YAPAY ZEKA HİKAYE ÜRETİMİ ---
+
+@app.post("/generate-story/{user_id}")
+def generate_story(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+        
+    # Get recent learned words (max 20)
+    progresses = db.query(models.UserProgress).filter(
+        models.UserProgress.user_id == user_id, 
+        models.UserProgress.is_learned == True
+    ).order_by(models.UserProgress.last_reviewed.desc()).limit(20).all()
+    
+    if len(progresses) < 5:
+        raise HTTPException(status_code=400, detail="Yapay zekanın mantıklı bir hikaye yazabilmesi için en az 5 kelime öğrenmiş olmalısın!")
+        
+    words = [p.word.word_en for p in progresses]
+    level = user.current_level or "A2"
+    
+    prompt = f"""
+    Sen yaratıcı bir İngilizce öğretmenisin. Karşındaki kişi {level} seviyesinde İngilizce öğreniyor.
+    Şu kelimelerin TAMAMININ kullanıldığı, sürükleyici, kısa bir hikaye yaz (maksimum 150 kelime).
+    Hikaye {level} seviyesine uygun, basit ve anlaşılır olmalı.
+    
+    Hedef kelimeler: {', '.join(words)}
+    
+    JSON formatında yanıt ver. JSON'da şu alanlar olmalı:
+    "title": "Hikayenin İngilizce Başlığı",
+    "content_en": "Hikayenin İngilizce metni. Lütfen hedef kelimeleri metin içinde kalın (bold) yap (örn: **apple**).",
+    "content_tr": "Hikayenin tamamen Türkçe çevirisi. Hedef kelimelerin çevirilerini de kalın (bold) yap."
+    """
+    
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
+    
+    try:
+        model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+        response = model.generate_content(prompt)
+        
+        result_str = response.text
+        result_json = json.loads(result_str)
+        
+        # Save to DB
+        new_story = models.UserStory(
+            user_id=user_id,
+            title=result_json.get("title", "My Weekly Story"),
+            content_en=result_json.get("content_en", ""),
+            content_tr=result_json.get("content_tr", ""),
+            used_words=json.dumps(words)
+        )
+        db.add(new_story)
+        db.commit()
+        db.refresh(new_story)
+        
+        return {"status": "success", "story": new_story}
+        
+    except Exception as e:
+        print(f"Gemini Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Hikaye üretilirken yapay zeka servisinde bir hata oluştu: {str(e)}")
+
+@app.get("/get-stories/{user_id}")
+def get_stories(user_id: int, db: Session = Depends(get_db)):
+    stories = db.query(models.UserStory).filter(models.UserStory.user_id == user_id).order_by(models.UserStory.created_at.desc()).all()
+    return {"status": "success", "stories": stories}

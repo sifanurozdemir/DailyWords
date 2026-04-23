@@ -34,6 +34,12 @@ class User(Base):
     daily_goal = Column(Integer, default=5)       # Günlük kaç kelime hedefliyor?
     streak_count = Column(Integer, default=0)     # Uygulamaya giriş serisi
     last_study_date = Column(DateTime, nullable=True)
+    xp = Column(Integer, default=0)               # Kullanıcının toplam XP'si
+    highest_combo = Column(Integer, default=0)    # Oyunlardaki en yüksek combosu
+    penalty_total_xp = Column(Integer, default=0) # Sadece penaltı oyunu XP'si
+    penalty_high_score = Column(Integer, default=0)# Sadece penaltı gol rekoru
+    bug_hunt_total_xp = Column(Integer, default=0) # Bug Hunt toplam XP'si
+    bug_hunt_high_score = Column(Integer, default=0) # Bug Hunt rekoru
 
 class UserProgress(Base):
     __tablename__ = "user_progress"
@@ -63,7 +69,18 @@ class SpeechAttempt(Base):
     dtw_score = Column(Float) # 0-100 arası çakışma skoru
     whisper_text = Column(String) # Ne duyuldu (Loglama amaçlı)
     
-    # "Substitutions, Deletions, Insertions" verilerini tutacak dinamik yapı
     error_details = Column(JSONB, nullable=True) 
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class UserStory(Base):
+    __tablename__ = "user_stories"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String)
+    content_en = Column(Text)
+    content_tr = Column(Text, nullable=True)
+    used_words = Column(Text) # JSON string
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")

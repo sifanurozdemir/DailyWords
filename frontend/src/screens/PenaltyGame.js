@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated, Dimensions, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Animated, Dimensions, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import Matter from 'matter-js';
+import { useUser } from '../context/UserContext';
+import apiClient from '../api/client';
+import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
 export default function PenaltyGame({ route, navigation }) {
     const { theme } = useTheme();
+    const { userData } = useUser();
     const insets = useSafeAreaInsets();
 
     // --- KELİME YÖNETİMİ ---
@@ -20,6 +24,9 @@ export default function PenaltyGame({ route, navigation }) {
     const ballY = useRef(new Animated.Value(0)).current; 
     const ballX = useRef(new Animated.Value(0)).current; 
     const ballScale = useRef(new Animated.Value(1)).current; 
+    const ballRotation = useRef(new Animated.Value(0)).current;
+    const screenShake = useRef(new Animated.Value(0)).current;
+    
     const [animStatus, setAnimStatus] = useState('idle'); 
 
     // Kaleci Animasyonu
@@ -28,18 +35,62 @@ export default function PenaltyGame({ route, navigation }) {
     // Oyun State'leri
     const [gameState, setGameState] = useState('start'); 
     const [score, setScore] = useState(0);
+    const [gameXp, setGameXp] = useState(0);
     const [timeLeft, setTimeLeft] = useState(5);
     const [currentWord, setCurrentWord] = useState(null);
     const [options, setOptions] = useState([]);
     const [feedback, setFeedback] = useState(null);
     const [feedbackTargetId, setFeedbackTargetId] = useState(null); 
+    const [earnedXpFloat, setEarnedXpFloat] = useState(null);
+
+    // SES YÜKLEME
+    const [sounds, setSounds] = useState({});
+
+    useEffect(() => {
+        let kickSound, goalSound, missSound;
+        const loadSounds = async () => {
+            try {
+                kickSound = await Audio.Sound.createAsync({ uri: 'https://actions.google.com/sounds/v1/foley/kick_drum.ogg' });
+                goalSound = await Audio.Sound.createAsync({ uri: 'https://actions.google.com/sounds/v1/crowds/crowd_cheer.ogg' });
+                missSound = await Audio.Sound.createAsync({ uri: 'https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg' });
+                setSounds({ kick: kickSound.sound, goal: goalSound.sound, miss: missSound.sound });
+            } catch (e) {
+                console.log("Sesler yüklenemedi", e);
+            }
+        };
+        loadSounds();
+        return () => {
+            if (kickSound?.sound) kickSound.sound.unloadAsync();
+            if (goalSound?.sound) goalSound.sound.unloadAsync();
+            if (missSound?.sound) missSound.sound.unloadAsync();
+        };
+    }, []);
+
+    const shuffleArray = (array) => {
+        let newArr = [...array];
+        for (let i = newArr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+        }
+        return newArr;
+    };
 
     // 1. ADIM: Kelimeleri Hazırla ve Karıştır
     useEffect(() => {
-        let userWords = route.params?.words || [];
-        
-        if (userWords.length < 4) {
-            userWords = [
+        const fetchWords = async () => {
+            try {
+                if (userData && userData.user_id) {
+                    const res = await apiClient.get(`/get-learned-words/${userData.user_id}`);
+                    if (res.data && res.data.length >= 4) {
+                        setShuffledPool(shuffleArray(res.data));
+                        setIsPoolReady(true);
+                        return;
+                    }
+                }
+            } catch (e) { console.log(e); }
+            
+            // Fallback to mock data if <4 learned words or error
+            const fallbackWords = [
                 { id: 'b1', word_en: 'Accomplish', meaning_tr: 'Başarmak' },
                 { id: 'b2', word_en: 'Identify', meaning_tr: 'Tanımlamak' },
                 { id: 'b3', word_en: 'Significant', meaning_tr: 'Önemli' },
@@ -47,12 +98,11 @@ export default function PenaltyGame({ route, navigation }) {
                 { id: 'b5', word_en: 'Evaluate', meaning_tr: 'Değerlendirmek' },
                 { id: 'b6', word_en: 'Sustain', meaning_tr: 'Sürdürmek' }
             ];
-        }
-
-        const shuffled = [...userWords].sort(() => Math.random() - 0.5);
-        setShuffledPool(shuffled);
-        setIsPoolReady(true);
-    }, [route.params?.words]);
+            setShuffledPool(shuffleArray(fallbackWords));
+            setIsPoolReady(true);
+        };
+        fetchWords();
+    }, [userData]);
 
     // KALECİ HAREKETİ (Sürekli Loop)
     useEffect(() => {
@@ -71,6 +121,7 @@ export default function PenaltyGame({ route, navigation }) {
 
     const startGame = () => {
         setScore(0);
+        setGameXp(0);
         setCurrentIndex(0); 
         setGameState('playing');
         setTimeout(loadNextWord, 50);
@@ -78,6 +129,7 @@ export default function PenaltyGame({ route, navigation }) {
 
     const loadNextWord = () => {
         setFeedbackTargetId(null);
+        setEarnedXpFloat(null);
         if (shuffledPool.length === 0) return;
 
         setFeedback(null);
@@ -85,24 +137,22 @@ export default function PenaltyGame({ route, navigation }) {
         ballY.setValue(0);
         ballX.setValue(0);
         ballScale.setValue(1);
+        ballRotation.setValue(0);
+        screenShake.setValue(0);
         setTimeLeft(5);
 
         let activeIdx = currentIndex;
 
         if (activeIdx >= shuffledPool.length) {
-            const reshuffled = [...shuffledPool].sort(() => Math.random() - 0.5);
+            const reshuffled = shuffleArray(shuffledPool);
             setShuffledPool(reshuffled);
             activeIdx = 0;
         }
 
         const correctWord = shuffledPool[activeIdx];
         
-        const wrongOptions = shuffledPool
-            .filter(w => w.id !== correctWord.id)
-            .sort(() => Math.random() - 0.5)
-            .slice(0, 3);
-
-        const questionOptions = [correctWord, ...wrongOptions].sort(() => Math.random() - 0.5);
+        const wrongOptions = shuffleArray(shuffledPool.filter(w => w.id !== correctWord.id)).slice(0, 3);
+        const questionOptions = shuffleArray([correctWord, ...wrongOptions]);
 
         setCurrentWord(correctWord);
         setOptions(questionOptions);
@@ -124,42 +174,100 @@ export default function PenaltyGame({ route, navigation }) {
         return () => clearInterval(timer);
     }, [gameState, currentWord, feedback]);
 
-    // 2. ADIM: Gelişmiş Şut ve Fizik Animasyonu
+    useEffect(() => {
+        if (gameState === 'gameover' && (score > 0 || gameXp > 0)) {
+            const saveStats = async () => {
+                try {
+                    if (userData && userData.user_id) {
+                        await apiClient.post(`/update-penalty-stats/${userData.user_id}`, {
+                            xp_earned: gameXp,
+                            score_reached: score
+                        });
+                    }
+                } catch (e) {
+                    console.log("Stat save error", e);
+                }
+            };
+            saveStats();
+        }
+    }, [gameState]);
+
+    // 2. ADIM: Gerçekçi Parabolik 3D Şut Animasyonu
     const runShootAnimation = (isGoal) => {
         setAnimStatus('shooting');
         
-        // Yanlış cevapta topu direklere veya dışarıya saptır (Fiziksel sapma)
-        const sideFalso = isGoal ? (Math.random() - 0.5) * 30 : (Math.random() > 0.5 ? 100 : -100);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        if (sounds.kick) sounds.kick.playFromPositionAsync(0);
 
-        Animated.parallel([
-            Animated.timing(ballY, {
-                toValue: isGoal ? -190 : -130, 
-                duration: 600,
-                useNativeDriver: true,
-            }),
-            Animated.timing(ballX, {
-                toValue: sideFalso,
-                duration: 600,
-                useNativeDriver: true,
-            }),
-            Animated.timing(ballScale, {
-                toValue: 0.35,
-                duration: 600,
-                useNativeDriver: true,
-            })
-        ]).start(() => {
-            if (isGoal) {
+        if (isGoal) {
+            // GOL: Top yükselir (Apex) ve fileye düşer (Parabolik Kavis)
+            const targetX = (Math.random() - 0.5) * 130; // Kalenin içi (-65 ile +65)
+            
+            Animated.parallel([
+                Animated.sequence([
+                    Animated.timing(ballY, { toValue: -240, duration: 250, easing: Easing.out(Easing.quad), useNativeDriver: true }), // Havalanma
+                    Animated.timing(ballY, { toValue: -150, duration: 200, easing: Easing.bounce, useNativeDriver: true }), // Düşüş ve Fileye Çarpma
+                ]),
+                Animated.timing(ballX, { toValue: targetX, duration: 450, easing: Easing.linear, useNativeDriver: true }),
+                Animated.timing(ballScale, { toValue: 0.28, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+                Animated.timing(ballRotation, { toValue: 1.5, duration: 450, useNativeDriver: true })
+            ]).start(() => {
                 setAnimStatus('goal');
-                Vibration.vibrate(100); // Gol olunca hafif titreşim
-                setTimeout(loadNextWord, 1000);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                if (sounds.goal) sounds.goal.playFromPositionAsync(0);
+                setTimeout(loadNextWord, 1600);
+            });
+        } else {
+            // KAÇIŞ: Direğe çarpma veya çok farkla dışarı gitme
+            const isPostHit = Math.random() > 0.4;
+            const targetX = isPostHit ? (Math.random() > 0.5 ? 115 : -115) : (Math.random() > 0.5 ? 180 : -180);
+
+            if (isPostHit) {
+                // Direğe Çarpıp Geri Sekme
+                Animated.parallel([
+                    Animated.timing(ballY, { toValue: -150, duration: 250, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+                    Animated.timing(ballX, { toValue: targetX, duration: 250, easing: Easing.linear, useNativeDriver: true }),
+                    Animated.timing(ballScale, { toValue: 0.35, duration: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+                    Animated.timing(ballRotation, { toValue: 0.8, duration: 250, useNativeDriver: true })
+                ]).start(() => {
+                    if (sounds.miss) sounds.miss.playFromPositionAsync(0);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    
+                    // Şiddetli Kamera Sarsıntısı
+                    Animated.sequence([
+                        Animated.timing(screenShake, { toValue: 15, duration: 50, useNativeDriver: true }),
+                        Animated.timing(screenShake, { toValue: -15, duration: 50, useNativeDriver: true }),
+                        Animated.timing(screenShake, { toValue: 15, duration: 50, useNativeDriver: true }),
+                        Animated.timing(screenShake, { toValue: 0, duration: 50, useNativeDriver: true }),
+                    ]).start();
+                    
+                    // Topun Sahaya Geri Sekmesi
+                    Animated.parallel([
+                        Animated.timing(ballY, { toValue: -20, duration: 500, easing: Easing.bounce, useNativeDriver: true }),
+                        Animated.timing(ballX, { toValue: targetX > 0 ? targetX + 60 : targetX - 60, duration: 500, useNativeDriver: true }),
+                        Animated.timing(ballScale, { toValue: 0.7, duration: 500, useNativeDriver: true }),
+                        Animated.timing(ballRotation, { toValue: 0, duration: 500, useNativeDriver: true })
+                    ]).start();
+
+                    setAnimStatus('miss');
+                    setTimeout(() => setGameState('gameover'), 1500);
+                });
             } else {
-                setAnimStatus('miss');
-                // Direkten dönme/sekme efekti
-                Animated.spring(ballY, { toValue: -90, bounciness: 15, useNativeDriver: true }).start();
-                Vibration.vibrate([0, 50, 50, 50]); // Hata titreşimi
-                setTimeout(() => setGameState('gameover'), 1500);
+                // Farkla Dışarı (Üstten veya Yandan)
+                const overY = Math.abs(targetX) < 130 ? -300 : -180; // Kalenin üstünden geçiyorsa çok havaya gider
+                Animated.parallel([
+                    Animated.timing(ballY, { toValue: overY, duration: 550, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+                    Animated.timing(ballX, { toValue: targetX, duration: 550, easing: Easing.linear, useNativeDriver: true }),
+                    Animated.timing(ballScale, { toValue: 0.15, duration: 550, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+                    Animated.timing(ballRotation, { toValue: 2, duration: 550, useNativeDriver: true })
+                ]).start(() => {
+                    if (sounds.miss) sounds.miss.playFromPositionAsync(0);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    setAnimStatus('miss');
+                    setTimeout(() => setGameState('gameover'), 1500);
+                });
             }
-        });
+        }
     };
 
     const handleAnswer = (selectedWord, isTimeout = false) => {
@@ -171,17 +279,46 @@ export default function PenaltyGame({ route, navigation }) {
         setFeedback(isCorrect ? 'goal' : 'miss');
         runShootAnimation(isCorrect);
 
-        if (isCorrect) setScore(prev => prev + 1);
+        if (isCorrect) {
+            const xpGained = timeLeft * 10;
+            setGameXp(prev => prev + xpGained);
+            setScore(prev => prev + 1);
+            setEarnedXpFloat(xpGained);
+        } else if (isTimeout) {
+            setGameState('gameover');
+        }
     };
+
+    const spin = ballRotation.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '720deg']
+    });
+    
+    const shadowScale = ballY.interpolate({
+        inputRange: [-250, -100, 0],
+        outputRange: [0, 0.4, 1],
+        extrapolate: 'clamp'
+    });
+    const shadowOpacity = ballY.interpolate({
+        inputRange: [-250, -100, 0],
+        outputRange: [0, 0.2, 0.5],
+        extrapolate: 'clamp'
+    });
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <Animated.View style={[{ flex: 1 }, { transform: [{ translateX: screenShake }] }]}>
+                <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Ionicons name="arrow-back" size={28} color={theme.text} />
                 </TouchableOpacity>
-                <View style={[styles.scoreBadge, { backgroundColor: theme.primary }]}>
-                    <Text style={styles.scoreText}>🏆 {score}</Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={[styles.scoreBadge, { backgroundColor: theme.warning }]}>
+                        <Text style={styles.scoreText}>⚡ {gameXp}</Text>
+                    </View>
+                    <View style={[styles.scoreBadge, { backgroundColor: theme.primary }]}>
+                        <Text style={styles.scoreText}>🏆 {score}</Text>
+                    </View>
                 </View>
             </View>
 
@@ -197,19 +334,30 @@ export default function PenaltyGame({ route, navigation }) {
                             </Animated.View>
                         </View>
                         
+                        {/* GÖLGE */}
+                        <Animated.View style={[
+                            styles.ballShadow,
+                            {
+                                transform: [{ scale: shadowScale }],
+                                opacity: shadowOpacity
+                            }
+                        ]} />
+
                         {/* TOP */}
                         <Animated.View style={[
                             styles.ball, 
                             { transform: [
                                 { translateY: ballY }, 
                                 { translateX: ballX }, 
-                                { scale: ballScale }
+                                { scale: ballScale },
+                                { rotate: spin }
                             ]}
                         ]}>
                             <Text style={{ fontSize: 50 }}>⚽</Text>
                         </Animated.View>
 
-                        {animStatus === 'goal' && <Text style={styles.goalFlash}>GOOOOL! 🔥</Text>}
+                        {animStatus === 'goal' && <Animated.Text style={[styles.goalFlash, { transform: [{ scale: 1.2 }] }]}>GOOOOL! 🔥</Animated.Text>}
+                        {animStatus === 'goal' && earnedXpFloat !== null && earnedXpFloat > 0 && <Text style={[styles.goalFlash, { top: 120, fontSize: 24, color: theme.warning }]}>+{earnedXpFloat} XP</Text>}
                         {animStatus === 'miss' && <Text style={styles.missFlash}>DIŞARIYA! ❌</Text>}
                     </View>
 
@@ -261,11 +409,13 @@ export default function PenaltyGame({ route, navigation }) {
                     <Text style={{ fontSize: 80 }}>{gameState === 'start' ? '⚽' : '🛑'}</Text>
                     <Text style={[styles.title, { color: theme.text }]}>{gameState === 'start' ? 'Penaltı Maçı' : 'Maç Bitti'}</Text>
                     {gameState === 'gameover' && <Text style={[styles.finalScore, { color: theme.primary }]}>{score} GOL</Text>}
+                    {gameState === 'gameover' && <Text style={{ color: theme.warning, fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>+{gameXp} Toplam XP!</Text>}
                     <TouchableOpacity style={[styles.startBtn, { backgroundColor: theme.primary }]} onPress={startGame}>
                         <Text style={styles.startBtnText}>{gameState === 'start' ? 'BAŞLA' : 'TEKRAR DENE'}</Text>
                     </TouchableOpacity>
                 </View>
             )}
+            </Animated.View>
         </SafeAreaView>
     );
 }
@@ -280,6 +430,8 @@ const styles = StyleSheet.create({
     goalPost: { width: 220, height: 120, borderTopWidth: 6, borderLeftWidth: 6, borderRightWidth: 6, position: 'absolute', top: 30, borderRadius: 5, alignItems: 'center' },
     netLine: { width: '100%', height: 1, backgroundColor: '#ccc', marginTop: 35, opacity: 0.2, position: 'absolute' },
     ball: { zIndex: 5, marginBottom: 15 },
+    ballShadow: { width: 45, height: 12, backgroundColor: '#000', borderRadius: 20, position: 'absolute', bottom: 10, zIndex: 1 },
+    particle: { position: 'absolute', fontSize: 30, zIndex: 10 },
     goalFlash: { position: 'absolute', top: 60, fontSize: 50, fontWeight: '900', color: '#4CAF50', zIndex: 20 },
     missFlash: { position: 'absolute', top: 60, fontSize: 40, fontWeight: '900', color: '#F44336', zIndex: 20 },
     questionCard: { borderRadius: 20, padding: 18, marginTop: 15, borderWidth: 1, elevation: 4 },

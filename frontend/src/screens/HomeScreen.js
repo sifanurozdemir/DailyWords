@@ -1,18 +1,20 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StatusBar, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StatusBar, Switch, Platform, Animated } from 'react-native';
 // YENİ VE KESİN ÇÖZÜM: İşletim sisteminin tuş boşluklarını hesaplayan hook
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
 import apiClient from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
+import { Ionicons } from '@expo/vector-icons';
+import StoryListScreen from './StoryListScreen';
 
 export default function HomeScreen({ route, navigation }) {
     const { userData, loginUser } = useUser();
     const user = userData || route.params?.user;
     const { theme, isDark, toggleTheme } = useTheme();
     
-    // SİHİRLİ KOD: Android ve iOS tuş yüksekliğini ölçer (Örn: Android'de 48px, iOS'ta 34px)
+    // SİHİRLİ KOD: Android ve iOS tuş yüksekliğini ölçer
     const insets = useSafeAreaInsets(); 
 
     const [words, setWords] = useState([]);
@@ -24,19 +26,20 @@ export default function HomeScreen({ route, navigation }) {
     const [showLearnedModal, setShowLearnedModal] = useState(false);
     const [learnedWordsList, setLearnedWordsList] = useState([]);
     const [currentTab, setCurrentTab] = useState('home');
-    const [dailyGoal, setDailyGoal] = useState(user.daily_goal || 5);
+    const [dailyGoal, setDailyGoal] = useState(user?.daily_goal || 5);
     const [savingGoal, setSavingGoal] = useState(false);
     const [isExtraMode, setIsExtraMode] = useState(false);
     
     const [toastMessage, setToastMessage] = useState(null);
-    const cancelledUndos = useRef(new Set());
 
-    // DÜZELTME: Çift yazılan satır silindi, sadece bunlar kaldı:
-    const [undoWordId, setUndoWordId] = useState(null);
-    const [undoWord, setUndoWord] = useState(null); // YENİ: Sildiğimiz kelimeyi tutacak hafıza
+    // --- YENİ SİSTEM: PROGRESS BAR VE GERİ ALMA DEĞİŞKENLERİ (TEKİL TANIM) ---
+    const [undoId, setUndoId] = useState(null); // Hangi kelime geri sayımda?
+    const undoTimerRef = useRef(null); // Zamanlayıcı referansı
+    const progressAnim = useRef(new Animated.Value(0)).current; // Animasyon çizgisi değeri
 
     const totalWords = 6066;
 
+    // ... useEffect ve diğer fonksiyonlar buradan devam ediyor
     useEffect(() => { 
         if (!userData && route.params?.user) loginUser(route.params.user);
     }, []);
@@ -105,47 +108,47 @@ export default function HomeScreen({ route, navigation }) {
         } catch (e) { showToast("Liste yüklenemedi."); }
     };
 
-    const handleKnown = (item) => { // DÜZELTME: Sadece word_id değil, tüm "item" objesini alıyoruz
-        const word_id = item.id;
-        setUndoWordId(word_id);
-        setUndoWord(item); // YENİ: Kelimeyi geçici hafızaya al
+    // --- GÜNCELLENEN handleKnown FONKSİYONU ---
+    const handleKnown = (item) => {
+    const word_id = item.id;
+
+    // Eğer buton zaten geri sayım modundaysa ve tekrar basıldıysa: İPTAL ET
+    if (undoId === word_id) {
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        progressAnim.setValue(0); // Çizgiyi sıfırla
+        setUndoId(null); // Moddan çık
+        return;
+    }
+
+    // İlk tıklama: Modu aktif et ve çizgiyi baştan başlat
+    setUndoId(word_id);
+    progressAnim.setValue(0);
+
+    // Çizgiyi 1.5 saniyede doldur (0'dan 1'e)
+    Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: false,
+    }).start();
+
+    // 1.5 saniye sonra işlemi kesinleştir
+    undoTimerRef.current = setTimeout(async () => {
+        setUndoId(null);
+        progressAnim.setValue(0);
+        
+        // Kartı ekrandan kaldır
         setWords(prev => prev.filter(w => w.id !== word_id));
-        showToast('Öğrenildi! (3sn içinde geri alabilirsin)');
 
-        setTimeout(async () => {
-            if (cancelledUndos.current.has(word_id)) {
-                cancelledUndos.current.delete(word_id); 
-                return;
-            }
-
-            try {
-                const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
-                setLearnedCount(res.data.total_learned);
-                
-                const nextRes = await apiClient.get(`/get-my-words/${user.user_id}?force_extra=1`);
-                const responseData = nextRes.data;
-                
-                if (responseData && responseData.words && responseData.words.length > 0) {
-                    setWords(prev => {
-                        const existingIds = prev.map(w => w.id);
-                        const additions = responseData.words.filter(w => !existingIds.includes(w.id));
-                        const remainingGoal = Math.max(0, dailyGoal - learnedToday);
-                        
-                        if (remainingGoal === 0) return [...prev, ...additions];
-                        return [...prev, ...additions].slice(0, remainingGoal);
-                    });
-                } else {
-                    setIsExtraMode(false);
-                }
-            } catch (error) { 
-                console.log("Biliyorum API Hatası:", error); 
-            }
-            
-            // Süre dolunca (geri alınmadıysa) hafızayı temizle
-            setUndoWordId(prev => prev === word_id ? null : prev);
-            setUndoWord(null); 
-        }, 3000);
-    };
+        // API kaydını yap
+        try {
+            const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
+            setLearnedCount(res.data.total_learned);
+            fetchInitialData(false); // Listeyi tazele
+        } catch (error) {
+            console.log("Hata:", error);
+        }
+    }, 1500);
+};
 
     const handleUndo = () => {
         if (undoWordId && undoWord) {
@@ -208,33 +211,25 @@ export default function HomeScreen({ route, navigation }) {
     };
 
     const renderWordItem = ({ item }) => {
-        const isSelected = !!studyList.find(s => s.id === item.id);
-        return (
-            <View style={[styles.card, { backgroundColor: theme.card, borderColor: isSelected ? theme.accent : theme.border }]}>
-                <View style={styles.wordInfo}>
-                    <Text style={[styles.wordEn, { color: theme.text }]}>{item.word_en}</Text>
-                    <Text style={[styles.wordTr, { color: theme.textSecondary }]}>{item.meaning_tr}</Text>
-                </View>
-                <View style={styles.actionRow}>
-                    <TouchableOpacity
-                        style={[styles.studyBtn, { backgroundColor: isSelected ? theme.accent : theme.progressBg }]}
-                        onPress={() => handleStudy(item)}
-                    >
-                        <Text style={[styles.studyBtnText, { color: isSelected ? '#FFF' : theme.text }]}>
-                            {isSelected ? "📋 Seçildi" : "➕ Çalış"}
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.knownBtn, { backgroundColor: theme.primaryLight }]}
-                        onPress={() => handleKnown(item)} // DÜZELTME: item.id yerine item gönderiyoruz
-                        disabled={isSelected}
-                    >
-                        <Text style={[styles.knownBtnText, { color: theme.successText }]}>✔ Biliyorum</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-        );
-    };
+    return (
+        <WordCard 
+            key={item.id}
+            item={item}
+            theme={theme}
+            isSelected={!!studyList.find(s => s.id === item.id)}
+            onStudy={handleStudy}
+            onConfirm={async (word_id) => {
+                // Sadece silme ve API işlemini yap
+                setWords(prev => prev.filter(w => w.id !== word_id));
+                try {
+                    const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
+                    setLearnedCount(res.data.total_learned);
+                    // fetchInitialData(false); // Opsiyonel: Listeyi çok sık yenilemek istemiyorsan kapatabilirsin
+                } catch (e) { console.log(e); }
+            }}
+        />
+    );
+};
 
     const renderReviewCard = (item) => {
         const reviewedToday = item.reviewed_today;
@@ -263,6 +258,33 @@ export default function HomeScreen({ route, navigation }) {
     };
 
     const remainingGoal = Math.max(0, dailyGoal - learnedToday);
+
+    // --- PROFIL EKRANI MANTIK HESAPLAMALARI ---
+    const safeUser = user || {};
+    const totalXp = (safeUser.xp || 0) + (safeUser.penalty_total_xp || 0) + (safeUser.bug_hunt_total_xp || 0);
+    const userLevel = Math.floor(totalXp / 100) + 1;
+    const nextLevelXp = userLevel * 100;
+    const currentLevelProgress = ((totalXp % 100) / 100) * 100;
+    
+    const getLevelTitle = (lvl) => {
+        if (lvl < 3) return "Dil Çırağı";
+        if (lvl < 7) return "Kelime Avcısı";
+        if (lvl < 15) return "Linguist";
+        if (lvl < 30) return "Sözlük Yutan";
+        return "Dil Üstadı";
+    };
+
+    const getMedal = (score) => {
+        if (score >= 15) return { icon: '🥇', label: 'Altın', color: '#FFD700', bg: 'rgba(255, 215, 0, 0.15)' };
+        if (score >= 10) return { icon: '🥈', label: 'Gümüş', color: '#C0C0C0', bg: 'rgba(192, 192, 192, 0.15)' };
+        if (score >= 5) return { icon: '🥉', label: 'Bronz', color: '#CD7F32', bg: 'rgba(205, 127, 50, 0.15)' };
+        return { icon: '🔒', label: 'Kilitli', color: '#666', bg: 'transparent' };
+    };
+
+    const penaltyMedal = getMedal(safeUser.penalty_high_score || 0);
+    const comboMedal = getMedal(safeUser.highest_combo || 0);
+    const bugHuntMedal = getMedal(safeUser.bug_hunt_high_score || 0);
+    // ---------------------------------------------
 
     return (
         <View style={[styles.outerContainer, { backgroundColor: theme.background }]}>
@@ -329,7 +351,14 @@ export default function HomeScreen({ route, navigation }) {
                                     <Text style={[styles.listTitle, { color: theme.text }]}>🔄 Tekrar Zamanı (SRS)</Text>
                                     <Text style={[styles.srsSubtitle, { color: theme.textMuted }]}>İlerleme: {completed} / {reviewWords.length} tamamlandı.</Text>
                                     {pending.length > 0 ? (
-                                        renderReviewCard(pending[0])
+                                        <TouchableOpacity
+                                            style={[styles.sessionBtn, { backgroundColor: theme.primary }]}
+                                            onPress={() => navigation.navigate('ContextReview', { pendingWords: pending, user_id: user.user_id })}
+                                        >
+                                            <Text style={styles.sessionBtnText}>
+                                                🔥 SEANSA BAŞLA ({pending.length} Kelime) ➔
+                                            </Text>
+                                        </TouchableOpacity>
                                     ) : (
                                         <Text style={{ color: theme.successText, fontWeight: 'bold' }}>Bugün bütün tekrarlarını bitirdin! 🎉</Text>
                                     )}
@@ -364,43 +393,217 @@ export default function HomeScreen({ route, navigation }) {
                 </View>
             )}
 
-            {/* GAMES TAB */}
+            {/* GAMES TAB - OYUN MERKEZİ */}
             {currentTab === 'games' && (
-                <View style={styles.tabContentContainer}>
-                    <Text style={styles.tabContentEmoji}>⚽</Text>
-                    <Text style={[styles.tabContentTitle, { color: theme.text }]}>Zamana Karşı Penaltı</Text>
-                    <Text style={[styles.tabContentDesc, { color: theme.textSecondary, marginBottom: 30 }]}>
-                        5 saniyen var. Doğru bil, golü at. Rekorunu kır!
+                <ScrollView 
+                    contentContainerStyle={{ padding: 20, paddingTop: 50, paddingBottom: 120 }}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <Text style={[styles.profileTitle, { color: theme.text, marginBottom: 5 }]}>🎮 Oyun Merkezi</Text>
+                    <Text style={[styles.profileUsername, { color: theme.textSecondary, marginBottom: 25 }]}>
+                        Kelimeleri eğlenerek pekiştir!
                     </Text>
-                    
-                    <TouchableOpacity
-                        style={{ backgroundColor: theme.primary, paddingVertical: 16, paddingHorizontal: 35, borderRadius: 25, elevation: 5 }}
-                        onPress={() => navigation.navigate('PenaltyGame', { words: words.length > 0 ? words : learnedWordsList })}
+
+                    {/* 1. OYUN: PENALTI (AKTİF) */}
+                    <TouchableOpacity 
+                        style={[styles.profileCard, { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.primary, 
+                            borderWidth: 1.5,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 15
+                        }]}
+                        onPress={() => navigation.navigate('PenaltyStart', { words: words.length > 0 ? words : learnedWordsList })}
                     >
-                        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>OYNAYA BAŞLA ➔</Text>
+                        <View style={{ width: 60, height: 60, backgroundColor: theme.primaryLight, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                            <Text style={{ fontSize: 30 }}>⚽</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.profileSectionTitle, { color: theme.text, marginBottom: 2 }]}>Zamana Karşı Penaltı</Text>
+                            <Text style={{ color: theme.textSecondary, fontSize: 13 }} numberOfLines={2}>
+                                5 saniyen var. Doğru bil, golü at. Rekorunu kır!
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.primary} />
                     </TouchableOpacity>
-                </View>
-            )}
 
-            {/* PROFILE TAB */}
-            {currentTab === 'profile' && (
-                <ScrollView contentContainerStyle={[styles.profileContent, { paddingBottom: 120 }]}>
-                    <Text style={[styles.profileTitle, { color: theme.text }]}>👤 Hesabım</Text>
-                    <Text style={[styles.profileUsername, { color: theme.textSecondary }]}>{user.username || 'Kullanıcı'}</Text>
+                    {/* 2. OYUN: CODE REFACTOR (AKTİF EDİLDİ) */}
+                    <TouchableOpacity 
+                        style={[styles.profileCard, { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.primary, 
+                            borderWidth: 1.5,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 15,
+                            marginTop: 15
+                        }]}
+                        onPress={() => navigation.navigate('RefactorStart')}
+                    >
+                        <View style={{ width: 60, height: 60, backgroundColor: theme.primaryLight, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                            <Text style={{ fontSize: 30 }}>👨‍💻</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.profileSectionTitle, { color: theme.text, marginBottom: 2 }]}>Code Refactor</Text>
+                            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
+                                Cümle dizilimini kod bloklarıyla düzelt.
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.primary} />
+                    </TouchableOpacity>
 
-                    <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                        <Text style={[styles.profileSectionTitle, { color: theme.text }]}>🌙 Görünüm Tercihi</Text>
-                        <View style={styles.themeRow}>
-                            <Text style={[styles.themeLabel, { color: theme.textSecondary }]}>{isDark ? 'Karanlık Mod' : 'Aydınlık Mod'}</Text>
-                            <Switch
-                                value={isDark}
-                                onValueChange={toggleTheme}
-                                thumbColor={isDark ? theme.primary : '#f4f3f4'}
-                                trackColor={{ false: theme.progressBg, true: theme.primaryDark }}
-                            />
+                    {/* 3. OYUN: BUG HUNT (AKTİF) */}
+                    <TouchableOpacity 
+                        style={[styles.profileCard, { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.primary, 
+                            borderWidth: 1.5,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 15,
+                            marginTop: 15
+                        }]}
+                        onPress={() => navigation.navigate('BugHuntStartScreen', { words: learnedWordsList.length > 0 ? learnedWordsList : words })}
+                    >
+                        <View style={{ width: 60, height: 60, backgroundColor: theme.primaryLight, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                            <Text style={{ fontSize: 30 }}>🐛</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.profileSectionTitle, { color: theme.text, marginBottom: 2 }]}>Bug Hunt</Text>
+                            <Text style={{ color: theme.textSecondary, fontSize: 13 }} numberOfLines={2}>
+                                İngilizce duyduğun kelimeyi böcek sisteme ulaşmadan yaz!
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.primary} />
+                    </TouchableOpacity>
+
+                    {/* 4. OYUN: THE INTERVIEWER (YAKINDA) */}
+                    <View 
+                        style={[styles.profileCard, { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.border, 
+                            opacity: 0.7,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 15,
+                            marginTop: 15
+                        }]}
+                    >
+                        <View style={{ width: 60, height: 60, backgroundColor: theme.progressBg, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                            <Text style={{ fontSize: 30, opacity: 0.5 }}>💼</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.profileSectionTitle, { color: theme.textMuted, marginBottom: 2 }]}>The Interviewer</Text>
+                            <Text style={{ color: theme.textMuted, fontSize: 13 }}>
+                                Teknik mülakatlara hazırlık simülasyonu.
+                            </Text>
+                        </View>
+                        <View style={{ backgroundColor: theme.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: theme.textMuted }}>YAKINDA</Text>
                         </View>
                     </View>
 
+                </ScrollView>
+            )}
+
+            {/* HİKAYELER TAB */}
+            {currentTab === 'stories' && (
+                <View style={{ flex: 1, paddingBottom: 100 }}>
+                    <StoryListScreen navigation={navigation} isTab={true} />
+                </View>
+            )}
+
+            {/* PROFILE TAB - GELİŞMİŞ GÖRÜNÜM */}
+            {currentTab === 'profile' && (
+                <ScrollView contentContainerStyle={[styles.profileContent, { paddingBottom: 120 }]} showsVerticalScrollIndicator={false}>
+                    
+                    {/* Üst Kısım: Profil ve Seviye (Level) */}
+                    <View style={{ alignItems: 'center', marginBottom: 25 }}>
+                        <View style={[styles.avatarCircle, { backgroundColor: theme.primaryLight, borderColor: theme.primary }]}>
+                            <Text style={{ fontSize: 45 }}>🦁</Text>
+                        </View>
+                        <Text style={[styles.profileTitle, { color: theme.text, marginTop: 10, fontSize: 24 }]}>{user.username || 'Kullanıcı'}</Text>
+                        <Text style={[styles.profileUsername, { color: theme.primary, fontWeight: 'bold', fontSize: 16 }]}>
+                            🌟 Level {userLevel} - {getLevelTitle(userLevel)}
+                        </Text>
+                    </View>
+
+                    {/* Level İlerleme Çubuğu */}
+                    <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.primary, borderWidth: 1.5 }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <Text style={{ color: theme.text, fontWeight: 'bold' }}>Sıradaki Seviyeye</Text>
+                            <Text style={{ color: theme.primary, fontWeight: 'bold' }}>{totalXp} / {nextLevelXp} XP</Text>
+                        </View>
+                        <View style={[styles.progressBarBg, { backgroundColor: theme.progressBg, height: 16, borderRadius: 8 }]}>
+                            <View style={[styles.progressBarFill, { width: `${currentLevelProgress}%`, backgroundColor: theme.primary, borderRadius: 8 }]} />
+                        </View>
+                    </View>
+
+                    {/* Ateş Serisi (Streak) */}
+                    <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.warning, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', padding: 20 }]}>
+                        <Text style={{ fontSize: 45, marginRight: 15 }}>🔥</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ color: theme.text, fontSize: 20, fontWeight: '900' }}>{user.streak_count || 0} Günlük Seri</Text>
+                            <Text style={{ color: theme.textSecondary, fontSize: 13, marginTop: 4 }}>Her gün gir, serini ateşle ve kaybetme!</Text>
+                        </View>
+                    </View>
+
+                    {/* Oyun Başarımları (Medals) */}
+                    <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <Text style={[styles.profileSectionTitle, { color: theme.text, marginBottom: 15 }]}>🏆 Oyun Başarımları</Text>
+                        
+                        <View style={{ flexDirection: 'row', marginBottom: 15 }}>
+                            <View style={[styles.medalBox, { backgroundColor: penaltyMedal.bg }]}>
+                                <Text style={{ fontSize: 35 }}>{penaltyMedal.icon}</Text>
+                            </View>
+                            <View style={{ flex: 1, justifyContent: 'center', marginLeft: 15 }}>
+                                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>Zamana Karşı Penaltı</Text>
+                                <Text style={{ color: penaltyMedal.color, fontWeight: 'bold' }}>{penaltyMedal.label} Madalya (Rekor: {user.penalty_high_score || 0})</Text>
+                            </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', marginBottom: 15 }}>
+                            <View style={[styles.medalBox, { backgroundColor: comboMedal.bg }]}>
+                                <Text style={{ fontSize: 35 }}>{comboMedal.icon}</Text>
+                            </View>
+                            <View style={{ flex: 1, justifyContent: 'center', marginLeft: 15 }}>
+                                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>Code Refactor</Text>
+                                <Text style={{ color: comboMedal.color, fontWeight: 'bold' }}>{comboMedal.label} Madalya (Kombo: {user.highest_combo || 0})</Text>
+                            </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row' }}>
+                            <View style={[styles.medalBox, { backgroundColor: bugHuntMedal.bg }]}>
+                                <Text style={{ fontSize: 35 }}>{bugHuntMedal.icon}</Text>
+                            </View>
+                            <View style={{ flex: 1, justifyContent: 'center', marginLeft: 15 }}>
+                                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>Bug Hunt</Text>
+                                <Text style={{ color: bugHuntMedal.color, fontWeight: 'bold' }}>{bugHuntMedal.label} Madalya (Rekor: {user.bug_hunt_high_score || 0})</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Genel İstatistikler */}
+                    <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <Text style={[styles.profileSectionTitle, { color: theme.text }]}>📊 Eğitim İstatistikleri</Text>
+                        <View style={styles.statsRow}>
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, { color: theme.primary }]}>{learnedCount}</Text>
+                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Öğrenilen</Text>
+                            </View>
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, { color: theme.accent }]}>{totalXp}</Text>
+                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Toplam XP</Text>
+                            </View>
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, { color: theme.successText }]}>{user.daily_goal}</Text>
+                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Günlük Hedef</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Günlük Hedef Ayarı */}
                     <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                         <Text style={[styles.profileSectionTitle, { color: theme.text }]}>🎯 Günlük Kelime Hedefi</Text>
                         <View style={styles.goalRow}>
@@ -424,28 +627,21 @@ export default function HomeScreen({ route, navigation }) {
                         {savingGoal && <ActivityIndicator size="small" color={theme.primary} style={{ marginTop: 10 }} />}
                     </View>
 
+                    {/* Tema Tercihi */}
                     <View style={[styles.profileCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                        <Text style={[styles.profileSectionTitle, { color: theme.text }]}>📊 İstatistikler</Text>
-                        <View style={styles.statsRow}>
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, { color: theme.primary }]}>{learnedCount}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Öğrenilen</Text>
-                            </View>
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, { color: theme.accent }]}>{reviewWords.length}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Tekrar Bekliyor</Text>
-                            </View>
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, { color: theme.warning }]}>{user.streak_count || 0}</Text>
-                                <Text style={[styles.statLabel, { color: theme.textMuted }]}>🔥 Seri</Text>
-                            </View>
+                        <Text style={[styles.profileSectionTitle, { color: theme.text }]}>🌙 Görünüm Tercihi</Text>
+                        <View style={styles.themeRow}>
+                            <Text style={[styles.themeLabel, { color: theme.textSecondary }]}>{isDark ? 'Karanlık Mod' : 'Aydınlık Mod'}</Text>
+                            <Switch
+                                value={isDark}
+                                onValueChange={toggleTheme}
+                                thumbColor={isDark ? theme.primary : '#f4f3f4'}
+                                trackColor={{ false: theme.progressBg, true: theme.primaryDark }}
+                            />
                         </View>
                     </View>
 
-                    <TouchableOpacity
-                        style={[styles.logoutBtn, { borderColor: theme.danger }]}
-                        onPress={handleLogout}
-                    >
+                    <TouchableOpacity style={[styles.logoutBtn, { borderColor: theme.danger }]} onPress={handleLogout}>
                         <Text style={[styles.logoutBtnText, { color: theme.danger }]}>🚪 Çıkış Yap</Text>
                     </TouchableOpacity>
                 </ScrollView>
@@ -464,6 +660,7 @@ export default function HomeScreen({ route, navigation }) {
             ]}>
                 {[
                     { id: 'home', icon: '📖', label: 'Kelimeler' },
+                    { id: 'stories', icon: '📚', label: 'Hikayeler' },
                     { id: 'games', icon: '🎮', label: 'Oyunlar' },
                     { id: 'profile', icon: '🏠', label: 'Hesabım' },
                 ].map(tab => (
@@ -506,22 +703,139 @@ export default function HomeScreen({ route, navigation }) {
                 </View>
             </Modal>
 
-            {/* Toast */}
-            {toastMessage && (
-                <View style={[undoWordId ? styles.undoToast : styles.toast]}>
-                    <Text style={styles.toastText}>{toastMessage}</Text>
-                    {undoWordId && (
-                        <TouchableOpacity onPress={handleUndo} style={styles.undoBtn}>
-                            <Text style={styles.undoBtnText}>Geri Al</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            )}
         </View>
     );
 }
 
+const WordCard = ({ item, theme, onConfirm, isSelected, onStudy }) => {
+    const [isWaitingUndo, setIsWaitingUndo] = useState(false);
+    const progressAnim = useRef(new Animated.Value(0)).current;
+    const timerRef = useRef(null);
+
+    const handlePress = () => {
+        if (isWaitingUndo) {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            progressAnim.setValue(0);
+            setIsWaitingUndo(false);
+        } else {
+            setIsWaitingUndo(true);
+            progressAnim.setValue(0);
+
+            Animated.timing(progressAnim, {
+                toValue: 100,
+                duration: 2000,
+                useNativeDriver: false,
+            }).start();
+
+            timerRef.current = setTimeout(() => {
+                onConfirm(item.id);
+            }, 2000);
+        }
+    };
+
+    // KENAR DOLMA HESAPLAMALARI
+    const bottomWidth = progressAnim.interpolate({
+        inputRange: [0, 25, 100],
+        outputRange: ['0%', '100%', '100%']
+    });
+    const rightHeight = progressAnim.interpolate({
+        inputRange: [0, 25, 50, 100],
+        outputRange: ['0%', '0%', '100%', '100%']
+    });
+    const topWidth = progressAnim.interpolate({
+        inputRange: [0, 50, 75, 100],
+        outputRange: ['0%', '0%', '100%', '100%']
+    });
+    const leftHeight = progressAnim.interpolate({
+        inputRange: [0, 75, 100],
+        outputRange: ['0%', '0%', '100%']
+    });
+
+    // Dinamik Çizgi Stili (Gölge/Parlama efekti için)
+    const edgeStyle = {
+        backgroundColor: theme.text, // Temadaki yazı rengini (siyah veya beyaz) baz alır
+        opacity: 0.6, // Şeffaflık sayesinde buton rengiyle uyumlu bir ton oluşturur
+        position: 'absolute',
+        zIndex: 10,
+    };
+
+    return (
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: isSelected ? theme.accent : theme.border }]}>
+            <View style={styles.wordInfo}>
+                <Text style={[styles.wordEn, { color: theme.text }]}>{item.word_en}</Text>
+                <Text style={[styles.wordTr, { color: theme.textSecondary }]}>{item.meaning_tr}</Text>
+            </View>
+            <View style={styles.actionRow}>
+                {!isWaitingUndo && (
+                    <TouchableOpacity 
+                        style={[styles.studyBtn, { backgroundColor: isSelected ? theme.accent : theme.progressBg }]} 
+                        onPress={() => onStudy(item)}
+                    >
+                        <Text style={{ color: isSelected ? '#FFF' : theme.text }}>{isSelected ? "📋 Seçildi" : "➕ Çalış"}</Text>
+                    </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={[
+                        styles.traceContainer, 
+                        { 
+                            flex: 1, 
+                            // EĞER bekliyorsa senin yeşilin, beklemiyorsa temanın orijinal rengi
+                            backgroundColor: isWaitingUndo ? '#4a804d' : theme.primaryLight 
+                        }
+                    ]}
+                    onPress={handlePress}
+                    disabled={isSelected}
+                >
+                    {isWaitingUndo && (
+                        <>
+                            {/* Dolma çizgileri sadece geri sayım varken görünür */}
+                            <Animated.View style={[edgeStyle, { bottom: 0, left: 0, height: 3, width: bottomWidth }]} />
+                            <Animated.View style={[edgeStyle, { right: 0, bottom: 0, width: 3, height: rightHeight }]} />
+                            <Animated.View style={[edgeStyle, { top: 0, right: 0, height: 3, width: topWidth }]} />
+                            <Animated.View style={[edgeStyle, { left: 0, top: 0, width: 3, height: leftHeight }]} />
+                        </>
+                    )}
+                    
+                    <Text style={[
+                        styles.knownBtnText, 
+                        { 
+                            // Geri al modunda beyaz yazı, normalde temanın yazı rengi
+                            color: isWaitingUndo ? '#FFFFFF' : theme.successText,
+                            zIndex: 11 
+                        }
+                    ]}>
+                        {isWaitingUndo ? "↩ Geri Al" : "✔ Biliyorum"}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+};
+
 const styles = StyleSheet.create({
+
+    traceContainer: {
+        height: 48,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden', 
+        position: 'relative',
+        
+    },
+    fillEdge: {
+        position: 'absolute',
+        // backgroundColor buraya yazma, yukarıda dinamik verdik
+        zIndex: 10,
+    },
+    knownBtnText: {
+        fontWeight: 'bold',
+        fontSize: 15,
+        zIndex: 11, // Yazı her zaman en üstte
+    },
+
     outerContainer: { flex: 1 },
     container: { flex: 1, padding: 20, paddingTop: 50 },
 
@@ -558,6 +872,9 @@ const styles = StyleSheet.create({
     // Başla butonu dinamikleştiği için buradan bottom: 90 ayarını sildik, yukarıda JSX içinde tanımlı.
     startBtn: { padding: 18, borderRadius: 20, position: 'absolute', left: 20, right: 20, elevation: 0, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3 },
     startBtnText: { color: '#fff', textAlign: 'center', fontWeight: '900', fontSize: 17 },
+
+    sessionBtn: { padding: 16, borderRadius: 16, marginTop: 15, elevation: 3, alignItems: 'center' },
+    sessionBtnText: { color: '#fff', textAlign: 'center', fontWeight: 'bold', fontSize: 16 },
 
     // Bar stili orijinal ve klasik halinde bırakıldı.
     bottomBar: { 
@@ -600,6 +917,9 @@ const styles = StyleSheet.create({
     statLabel: { fontSize: 12, marginTop: 4 },
     logoutBtn: { borderWidth: 2, borderRadius: 18, padding: 16, alignItems: 'center', marginTop: 10 },
     logoutBtnText: { fontSize: 16, fontWeight: 'bold' },
+
+    avatarCircle: { width: 90, height: 90, borderRadius: 45, borderWidth: 3, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2 },
+    medalBox: { width: 60, height: 60, borderRadius: 15, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#eee' },
 
     modalContent: { flex: 1, padding: 25 },
     modalTitle: { fontSize: 24, fontWeight: '800', marginBottom: 20, textAlign: 'center', marginTop: 30 },

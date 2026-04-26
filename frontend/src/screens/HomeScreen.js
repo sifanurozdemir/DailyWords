@@ -36,13 +36,19 @@ export default function HomeScreen({ route, navigation }) {
     const [undoId, setUndoId] = useState(null); // Hangi kelime geri sayımda?
     const undoTimerRef = useRef(null); // Zamanlayıcı referansı
     const progressAnim = useRef(new Animated.Value(0)).current; // Animasyon çizgisi değeri
+    const fetchIdRef = useRef(0); // Race condition (Yarış durumu) önleyici referans
+    const undoIdRef = useRef(null); // Geri alma durumu kontrolü için ek ref
+    const recentlyLearnedIds = useRef(new Set()); // Zombi kelimeleri önlemek için önbellek
 
     const totalWords = 6066;
 
     // ... useEffect ve diğer fonksiyonlar buradan devam ediyor
-    useEffect(() => { 
-        if (!userData && route.params?.user) loginUser(route.params.user);
-    }, []);
+    // SİHİRLİ DÜZELTME 2: Ekstra moddaki 5 kelime bittiğinde otomatik olarak kupaya dön.
+    useEffect(() => {
+        if (isExtraMode && words.length === 0 && !loading) {
+            setIsExtraMode(false);
+        }
+    }, [words.length, isExtraMode, loading]);
 
     useFocusEffect(
         useCallback(() => {
@@ -50,15 +56,20 @@ export default function HomeScreen({ route, navigation }) {
         }, [user?.user_id])
     );
 
-    const fetchInitialData = async (showLoading = true) => {
+    const fetchInitialData = async (showLoading = true, appendOnly = false) => {
+        const currentFetchId = ++fetchIdRef.current;
         try {
             if (showLoading) setLoading(true);
+            const t = Date.now(); // Caching sorununu çözmek için (Cache buster)
             const [wordRes, reviewRes, learnedRes, userRes] = await Promise.all([
-                apiClient.get(`/get-my-words/${user.user_id}`),
-                apiClient.get(`/get-review-words/${user.user_id}`),
-                apiClient.get(`/get-learned-words/${user.user_id}`),
-                apiClient.get(`/get-user/${user.user_id}`) 
+                apiClient.get(`/get-my-words/${user.user_id}${isExtraMode ? '?force_extra=5&' : '?'}t=${t}`),
+                apiClient.get(`/get-review-words/${user.user_id}?t=${t}`),
+                apiClient.get(`/get-learned-words/${user.user_id}?t=${t}`),
+                apiClient.get(`/get-user/${user.user_id}?t=${t}`) 
             ]);
+
+            // Eğer bu istek atıldıktan sonra yeni bir istek atıldıysa, eski isteği yoksay
+            if (currentFetchId !== fetchIdRef.current) return;
 
             let newWords = [];
             let fetchedLearnedToday = 0;
@@ -75,11 +86,39 @@ export default function HomeScreen({ route, navigation }) {
             setLearnedToday(fetchedLearnedToday);
             setDailyGoal(fetchedDailyGoal);
 
+            // SİHİRLİ DÜZELTME: Sunucudan gelen en güncel kullanıcı verilerini (XP, rekorlar vb.) hafızaya işle
+            if (userRes.data) {
+                loginUser(userRes.data);
+            }
+
             const remainingGoal = Math.max(0, fetchedDailyGoal - fetchedLearnedToday);
             
             setWords(prev => {
-                if (isExtraMode && prev.length > 0) return prev;
-                return newWords.slice(0, remainingGoal);
+                if (appendOnly) {
+                    // SİHİRLİ DÜZELTME: 
+                    // Ekstra moddaysak ekranda sürekli 5 kelime tut (Sonsuz pratik),
+                    // Normal moddaysak kalan hedefe göre eksikleri tamamla (Kelimeler azalarak biter).
+                    const needed = isExtraMode ? (5 - prev.length) : (remainingGoal - prev.length);
+                    
+                    if (needed > 0) {
+                        const existingIds = new Set(prev.map(w => w.id));
+                        const additionalWords = newWords
+                            .filter(w => !existingIds.has(w.id) && !recentlyLearnedIds.current.has(w.id))
+                            .slice(0, needed);
+                        
+                        return [...prev, ...additionalWords];
+                    }
+                    
+                    // Normal modda hedefe ulaşıldığında fazlalıkları siler, ekstra modda dokunmaz.
+                    return isExtraMode ? prev : prev.slice(0, Math.max(0, remainingGoal));
+                }
+
+                // Uygulamanın ilk açılışı veya Extra Moda ("Öğrenmeye Devam Et") ilk basıldığı an
+                if (isExtraMode) {
+                    return newWords.length > 0 ? newWords : prev;
+                } else {
+                    return newWords.length > 0 ? newWords.slice(0, remainingGoal === 0 ? newWords.length : remainingGoal) : [];
+                }
             });
             
             setReviewWords(Array.isArray(reviewRes.data) ? reviewRes.data : []);
@@ -91,8 +130,12 @@ export default function HomeScreen({ route, navigation }) {
             
         } catch (error) {
             console.log("Veri senkronizasyon hatası:", error);
-            setWords([]); setReviewWords([]);
-        } finally { setLoading(false); }
+            // Hata durumunda listeyi SİLMİYORUZ, böylece ekranda kelimeler kaybolmaz
+        } finally { 
+            if (currentFetchId === fetchIdRef.current) {
+                setLoading(false); 
+            }
+        }
     };
 
     const showToast = (message) => {
@@ -131,19 +174,24 @@ export default function HomeScreen({ route, navigation }) {
         useNativeDriver: false,
     }).start();
 
+    // Zombi kelime önlemi: Olası backend gecikmesine karşı bunu şimdiden hafızaya al
+    recentlyLearnedIds.current.add(word_id);
+
     // 1.5 saniye sonra işlemi kesinleştir
     undoTimerRef.current = setTimeout(async () => {
         setUndoId(null);
         progressAnim.setValue(0);
         
-        // Kartı ekrandan kaldır
+        // Kartı ekrandan kaldır (anında)
         setWords(prev => prev.filter(w => w.id !== word_id));
 
         // API kaydını yap
         try {
             const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
             setLearnedCount(res.data.total_learned);
-            fetchInitialData(false); // Listeyi tazele
+            
+            // API kaydı başarılı olunca yerine hemen yenisini çek, ama SADECE EKSİĞİ TAMAMLA!
+            fetchInitialData(false, true);
         } catch (error) {
             console.log("Hata:", error);
         }
@@ -153,6 +201,9 @@ export default function HomeScreen({ route, navigation }) {
     const handleUndo = () => {
         if (undoWordId && undoWord) {
             cancelledUndos.current.add(undoWordId); 
+            
+            // Geri aldığımız için zombi listesinden çıkarıyoruz
+            recentlyLearnedIds.current.delete(undoWordId);
             
             // SİHİRLİ DOKUNUŞ: Backend'e hiç sormadan, hafızadaki kelimeyi listenin başına ekle!
             setWords(prev => [undoWord, ...prev]); 
@@ -211,25 +262,40 @@ export default function HomeScreen({ route, navigation }) {
     };
 
     const renderWordItem = ({ item }) => {
-    return (
-        <WordCard 
-            key={item.id}
-            item={item}
-            theme={theme}
-            isSelected={!!studyList.find(s => s.id === item.id)}
-            onStudy={handleStudy}
-            onConfirm={async (word_id) => {
-                // Sadece silme ve API işlemini yap
-                setWords(prev => prev.filter(w => w.id !== word_id));
-                try {
-                    const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
-                    setLearnedCount(res.data.total_learned);
-                    // fetchInitialData(false); // Opsiyonel: Listeyi çok sık yenilemek istemiyorsan kapatabilirsin
-                } catch (e) { console.log(e); }
-            }}
-        />
-    );
-};
+        return (
+            <WordCard 
+                key={item.id}
+                item={item}
+                theme={theme}
+                isSelected={!!studyList.find(s => s.id === item.id)}
+                onStudy={handleStudy}
+                onConfirm={async (word_id) => {
+                    // 1. Kelimeyi anında ekrandan kaldır (Kullanıcı bekletilmez)
+                    setWords(prev => prev.filter(w => w.id !== word_id));
+                    
+                    // 2. Zombi kelime önlemi: Aynı kelimenin tekrar gelmesini engelle
+                    recentlyLearnedIds.current.add(word_id);
+
+                    try {
+                        // 3. Backend'e kelimenin öğrenildiğini bildir
+                        const res = await apiClient.post(`/mark-word-learned/?user_id=${user.user_id}&word_id=${word_id}&is_practice=false`);
+                        
+                        // 4. Öğrenilen sayısını güncelle
+                        setLearnedCount(res.data.total_learned);
+                        
+                        // 5. SİHİRLİ DOKUNUŞ: Arka planda sessizce (loading olmadan) yeni kelime çek
+                        // İlk parametre false: Ekranda dönen loading çıkarma
+                        // İkinci parametre true: Sadece eksilen kelimenin yerine ekle (appendOnly)
+                        fetchInitialData(false, true); 
+                        
+                    } catch (e) { 
+                        console.log("Kelime işaretlenirken hata:", e); 
+                    }
+                }}
+            />
+        );
+    };
+
 
     const renderReviewCard = (item) => {
         const reviewedToday = item.reviewed_today;
@@ -260,12 +326,26 @@ export default function HomeScreen({ route, navigation }) {
     const remainingGoal = Math.max(0, dailyGoal - learnedToday);
 
     // --- PROFIL EKRANI MANTIK HESAPLAMALARI ---
-    const safeUser = user || {};
-    const totalXp = (safeUser.xp || 0) + (safeUser.penalty_total_xp || 0) + (safeUser.bug_hunt_total_xp || 0);
-    const userLevel = Math.floor(totalXp / 100) + 1;
+    const safeUser = userData || user || {};
+    const totalXp = (Number(safeUser.xp) || 0) + (Number(safeUser.penalty_total_xp) || 0) + (Number(safeUser.bug_hunt_total_xp) || 0) + (Number(safeUser.swipe_match_total_xp) || 0);
+
+    const getMedal = (score, bronze = 5, silver = 10, gold = 15) => {
+        if (score >= gold) return { icon: '🥇', label: 'Altın', color: '#FFD700', bg: 'rgba(255, 215, 0, 0.15)' };
+        if (score >= silver) return { icon: '🥈', label: 'Gümüş', color: '#C0C0C0', bg: 'rgba(192, 192, 192, 0.15)' };
+        if (score >= bronze) return { icon: '🥉', label: 'Bronz', color: '#CD7F32', bg: 'rgba(205, 127, 50, 0.15)' };
+        return { icon: '🔒', label: 'Kilitli', color: '#666', bg: 'transparent' };
+    };
+
+    const penaltyMedal = getMedal(safeUser.penalty_high_score || 0, 5, 10, 15);
+    const comboMedal = getMedal(safeUser.highest_combo || 0, 5, 10, 15);
+    const bugHuntMedal = getMedal(safeUser.bug_hunt_high_score || 0, 10, 25, 50);
+    const swipeMatchMedal = getMedal(safeUser.swipe_match_high_score || 0, 15, 20, 25);
+
+
+    const userLevel = Math.floor(totalXp / 500) + 1;
     const nextLevelXp = userLevel * 100;
     const currentLevelProgress = ((totalXp % 100) / 100) * 100;
-    
+
     const getLevelTitle = (lvl) => {
         if (lvl < 3) return "Dil Çırağı";
         if (lvl < 7) return "Kelime Avcısı";
@@ -274,16 +354,6 @@ export default function HomeScreen({ route, navigation }) {
         return "Dil Üstadı";
     };
 
-    const getMedal = (score) => {
-        if (score >= 15) return { icon: '🥇', label: 'Altın', color: '#FFD700', bg: 'rgba(255, 215, 0, 0.15)' };
-        if (score >= 10) return { icon: '🥈', label: 'Gümüş', color: '#C0C0C0', bg: 'rgba(192, 192, 192, 0.15)' };
-        if (score >= 5) return { icon: '🥉', label: 'Bronz', color: '#CD7F32', bg: 'rgba(205, 127, 50, 0.15)' };
-        return { icon: '🔒', label: 'Kilitli', color: '#666', bg: 'transparent' };
-    };
-
-    const penaltyMedal = getMedal(safeUser.penalty_high_score || 0);
-    const comboMedal = getMedal(safeUser.highest_combo || 0);
-    const bugHuntMedal = getMedal(safeUser.bug_hunt_high_score || 0);
     // ---------------------------------------------
 
     return (
@@ -478,7 +548,35 @@ export default function HomeScreen({ route, navigation }) {
                         <Ionicons name="chevron-forward" size={20} color={theme.primary} />
                     </TouchableOpacity>
 
-                    {/* 4. OYUN: THE INTERVIEWER (YAKINDA) */}
+                    {/* 4. OYUN: SWIPE MATCH (YENİ) */}
+                    <TouchableOpacity 
+                        style={[styles.profileCard, { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.primary, 
+                            borderWidth: 1.5,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: 15,
+                            marginTop: 15
+                        }]}
+                        onPress={() => navigation.navigate('SwipeGameStartScreen', { words: learnedWordsList.length > 0 ? learnedWordsList : words })}
+                    >
+                        <View style={{ width: 60, height: 60, backgroundColor: theme.primaryLight, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                            <Text style={{ fontSize: 30 }}>🔥</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.profileSectionTitle, { color: theme.text, marginBottom: 2 }]}>Swipe Match</Text>
+                            <Text style={{ color: theme.textSecondary, fontSize: 13 }} numberOfLines={2}>
+                                Doğru anlam sağa, yanlış anlam sola! Zaman dolmadan eşleştir.
+                            </Text>
+                        </View>
+                        <View style={{ backgroundColor: theme.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginRight: 10 }}>
+                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#fff' }}>YENİ</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.primary} />
+                    </TouchableOpacity>
+
+                    {/* 5. OYUN: THE INTERVIEWER (YAKINDA) */}
                     <View 
                         style={[styles.profileCard, { 
                             backgroundColor: theme.card, 
@@ -573,13 +671,23 @@ export default function HomeScreen({ route, navigation }) {
                             </View>
                         </View>
 
-                        <View style={{ flexDirection: 'row' }}>
+                        <View style={{ flexDirection: 'row', marginBottom: 15 }}>
                             <View style={[styles.medalBox, { backgroundColor: bugHuntMedal.bg }]}>
                                 <Text style={{ fontSize: 35 }}>{bugHuntMedal.icon}</Text>
                             </View>
                             <View style={{ flex: 1, justifyContent: 'center', marginLeft: 15 }}>
                                 <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>Bug Hunt</Text>
                                 <Text style={{ color: bugHuntMedal.color, fontWeight: 'bold' }}>{bugHuntMedal.label} Madalya (Rekor: {user.bug_hunt_high_score || 0})</Text>
+                            </View>
+                        </View>
+
+                        <View style={{ flexDirection: 'row' }}>
+                            <View style={[styles.medalBox, { backgroundColor: swipeMatchMedal.bg }]}>
+                                <Text style={{ fontSize: 35 }}>{swipeMatchMedal.icon}</Text>
+                            </View>
+                            <View style={{ flex: 1, justifyContent: 'center', marginLeft: 15 }}>
+                                <Text style={{ color: theme.text, fontWeight: 'bold', fontSize: 16 }}>Swipe Match</Text>
+                                <Text style={{ color: swipeMatchMedal.color, fontWeight: 'bold' }}>{swipeMatchMedal.label} Madalya (Rekor: {user.swipe_match_high_score || 0})</Text>
                             </View>
                         </View>
                     </View>

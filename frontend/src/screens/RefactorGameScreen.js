@@ -382,17 +382,23 @@ export default function RefactorGameScreen({ navigation }) {
                     <Text style={[styles.codeText, { color: '#dcdcaa' }]}>function <Text style={{ color: '#4ec9b0' }}>Refactor</Text>() {"{"}</Text>
                     <View style={styles.wordRow}>
                         <Text style={[styles.codeText, { color: '#c586c0', marginLeft: 15 }]}>return </Text>
-                        {selectedWords.map((word, index) => (
-                            <DraggableWord 
-                                key={`${word}-${index}`} 
-                                word={word} 
-                                index={index} 
-                                wordColor={getWordColor(word)}
-                                onSwap={handleSwap}
-                                onRemove={handleRemoveWord}
-                                layouts={wordLayouts}
-                            />
-                        ))}
+                        {selectedWords.map((word, index) => {
+                            const current = prepareQuestion(gameData[currentIndex]);
+                            const originalArray = current ? current.clean.split(' ') : [];
+                            const isMisplaced = originalArray[index] !== word;
+
+                            return (
+                                <DraggableWord 
+                                    key={`${word}-${index}`} 
+                                    word={word} 
+                                    index={index} 
+                                    wordColor={isMisplaced ? '#ff4a4a' : getWordColor(word)}
+                                    onSwap={handleSwap}
+                                    onRemove={handleRemoveWord}
+                                    layouts={wordLayouts}
+                                />
+                            );
+                        })}
                         <BlinkingCursor />
                     </View>
                     <Text style={[styles.codeText, { color: '#dcdcaa' }]}>{"}"}</Text>

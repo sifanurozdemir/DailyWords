@@ -20,6 +20,8 @@ import BugHuntStartScreen from './src/screens/BugHuntStartScreen';
 import BugHuntGame from './src/screens/BugHuntGame';
 import StoryListScreen from './src/screens/StoryListScreen';
 import StoryReaderScreen from './src/screens/StoryReaderScreen';
+import SwipeGameStartScreen from './src/screens/SwipeGameStartScreen';
+import SwipeGame from './src/screens/SwipeGame';
 
 // YENİ: Penaltı Giriş Ekranı (O topun olduğu, 'Oynamaya Başla' butonu olan yer)
 // Not: Bu dosyayı henüz oluşturmadıysan screens klasöründe oluşturmayı unutma!
@@ -62,6 +64,10 @@ function AppNavigator() {
         {/* Bug Hunt */}
         <Stack.Screen name="BugHuntStartScreen" component={BugHuntStartScreen} />
         <Stack.Screen name="BugHuntGame" component={BugHuntGame} options={{ headerShown: false }} />
+
+        {/* Swipe Match */}
+        <Stack.Screen name="SwipeGameStartScreen" component={SwipeGameStartScreen} />
+        <Stack.Screen name="SwipeGame" component={SwipeGame} options={{ headerShown: false }} />
         
         {/* Stories */}
         <Stack.Screen name="StoryList" component={StoryListScreen} />

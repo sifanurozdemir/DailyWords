@@ -45,21 +45,33 @@ export function UserProvider({ children }) {
     };
 
     const updateDailyGoal = async (goal) => {
-        const newData = { ...userData, daily_goal: goal };
-        setUserData(newData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(newData));
+        setUserData(prev => {
+            const next = { ...prev, daily_goal: goal };
+            AsyncStorage.setItem('@user_data', JSON.stringify(next));
+            return next;
+        });
     };
 
     const updateCurrentLevel = async (level) => {
-        const newData = { ...userData, current_level: level };
-        setUserData(newData);
-        await AsyncStorage.setItem('@user_data', JSON.stringify(newData));
+        setUserData(prev => {
+            const next = { ...prev, current_level: level };
+            AsyncStorage.setItem('@user_data', JSON.stringify(next));
+            return next;
+        });
+    };
+
+    const updateUserFields = async (fields) => {
+        setUserData(prev => {
+            const next = { ...prev, ...fields };
+            AsyncStorage.setItem('@user_data', JSON.stringify(next));
+            return next;
+        });
     };
 
     return (
         <UserContext.Provider value={{
             userData, loginUser, logoutUser,
-            updateDailyGoal, updateCurrentLevel,
+            updateDailyGoal, updateCurrentLevel, updateUserFields,
             learnedCount, setLearnedCount,
             isAppLoading
         }}>

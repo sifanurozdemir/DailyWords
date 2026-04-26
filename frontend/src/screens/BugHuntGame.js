@@ -24,6 +24,8 @@ export default function BugHuntGame({ route, navigation }) {
     const [isPerfect, setIsPerfect] = useState(true);
     const [bugState, setBugState] = useState('walking'); // 'walking', 'dead'
     const [totalEarnedXp, setTotalEarnedXp] = useState(0);
+    const [allLearnedWords, setAllLearnedWords] = useState(words || []);
+    const [hintsRemaining, setHintsRemaining] = useState(1);
     
     const bugAnim = useRef(new Animated.Value(0)).current;
     const bugYAnim = useRef(new Animated.Value(0)).current;
@@ -33,10 +35,23 @@ export default function BugHuntGame({ route, navigation }) {
     const timerRef = useRef(null);
     const walkTimerRef = useRef(null);
 
-    // Initialize game
+    // Initialize game and fetch all learned words
     useEffect(() => {
+        const fetchLearned = async () => {
+            try {
+                if (userData && userData.user_id) {
+                    const res = await apiClient.get(`/get-learned-words/${userData.user_id}?t=${Date.now()}`);
+                    if (res.data && res.data.length > 0) {
+                        setAllLearnedWords(res.data);
+                    }
+                }
+            } catch (e) { console.log(e); }
+        };
+        fetchLearned();
+
         if (words && words.length > 0) {
-            spawnBug();
+            // İlk açılışta words ile başlar, fetch bitince allLearnedWords ile devam eder
+            spawnBug(words);
         } else {
             setGameState('gameover'); // No words
         }
@@ -66,14 +81,21 @@ export default function BugHuntGame({ route, navigation }) {
         Speech.speak(wordText, { language: 'en-US', rate: 0.9, pitch: 1.0 });
     };
 
-    const spawnBug = () => {
+    const spawnBug = (sourceArray = allLearnedWords) => {
         if (lives <= 0) return;
         
-        const randomWord = words[Math.floor(Math.random() * words.length)];
+        const listToUse = sourceArray.length > 0 ? sourceArray : words;
+        const randomWord = listToUse[Math.floor(Math.random() * listToUse.length)];
         setCurrentWord(randomWord);
         setInputText('');
         setBugState('walking');
         setIsPerfect(true);
+        
+        // Dinamik ipucu hakkı belirleme (Uzunluğa göre: <5 -> 1, 5-7 -> 2, >=8 -> 3)
+        const wordLen = randomWord.word_en.length;
+        if (wordLen >= 8) setHintsRemaining(3);
+        else if (wordLen >= 5) setHintsRemaining(2);
+        else setHintsRemaining(1);
         
         // Reset bug position
         bugAnim.setValue(0);
@@ -183,10 +205,43 @@ export default function BugHuntGame({ route, navigation }) {
             setTotalEarnedXp(prev => prev + xpGained);
             setScore(s => s + 1);
             
-            // Spawn next after explosion delay
+            // Spawn next after explosion delay (anlamını okuyabilmesi için süreyi artırdık)
             timerRef.current = setTimeout(() => {
                 spawnBug();
-            }, 600);
+            }, 1200);
+        }
+    };
+
+    const handleHint = () => {
+        if (gameState !== 'playing' || !currentWord || bugState === 'dead') return;
+        if (hintsRemaining <= 0) return;
+        
+        if (inputText.length < currentWord.word_en.length) {
+            setHintsRemaining(prev => prev - 1);
+            const nextChar = currentWord.word_en[inputText.length];
+            const newText = inputText + (nextChar.toLowerCase() === nextChar ? nextChar.toLowerCase() : nextChar);
+            
+            // İpucu kullanıldığı için perfect bozulur ve combo sıfırlanır
+            setIsPerfect(false);
+            setCombo(0);
+            
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setInputText(newText);
+            
+            if (newText.toLowerCase() === currentWord.word_en.toLowerCase()) {
+                bugAnim.stopAnimation();
+                bugYAnim.stopAnimation();
+                setBugState('dead');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                
+                const xpGained = 5; // İpucuyla bilirse düşük XP
+                setTotalEarnedXp(prev => prev + xpGained);
+                setScore(s => s + 1);
+                
+                timerRef.current = setTimeout(() => {
+                    spawnBug();
+                }, 1200);
+            }
         }
     };
 
@@ -254,6 +309,15 @@ export default function BugHuntGame({ route, navigation }) {
                             { translateY: bugYAnim }
                         ] 
                     }]}>
+                        {bugState === 'dead' && (
+                            <View style={{ position: 'absolute', top: -55, width: SCREEN_WIDTH * 0.8, alignItems: 'center', zIndex: 10 }}>
+                                <View style={{ backgroundColor: 'rgba(0,0,0,0.85)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12, minWidth: 100, alignItems: 'center' }}>
+                                    <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: '#00FF00', fontSize: 18, fontWeight: 'bold' }}>
+                                        {currentWord.meaning_tr}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
                         <Text style={{ fontSize: 50 }}>{bugState === 'dead' ? '💥' : '🐛'}</Text>
                         {isPerfect && combo > 1 && bugState === 'dead' && (
                             <Text style={{ position: 'absolute', top: -20, color: '#FFD700', fontWeight: 'bold', fontSize: 16 }}>PERFECT!</Text>
@@ -262,15 +326,25 @@ export default function BugHuntGame({ route, navigation }) {
                 )}
             </View>
 
-            {/* Replay Audio Button & Combo */}
+            {/* Replay Audio Button, Hint & Combo */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 15, paddingHorizontal: 20 }}>
-                <TouchableOpacity 
-                    style={styles.replayBtn} 
-                    onPress={() => currentWord && playAudio(currentWord.word_en)}
-                >
-                    <Ionicons name="volume-high" size={24} color="#fff" />
-                    <Text style={{ color: '#fff', fontWeight: 'bold', marginLeft: 8 }}>Tekrar Dinle</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row' }}>
+                    <TouchableOpacity 
+                        style={[styles.replayBtn, { paddingHorizontal: 15 }]} 
+                        onPress={() => currentWord && playAudio(currentWord.word_en)}
+                    >
+                        <Ionicons name="volume-high" size={24} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                        style={[styles.replayBtn, { backgroundColor: hintsRemaining > 0 ? '#FF9500' : '#555', marginLeft: 10 }]} 
+                        onPress={handleHint}
+                        disabled={hintsRemaining <= 0}
+                    >
+                        <Ionicons name="bulb" size={24} color={hintsRemaining > 0 ? "#fff" : "#888"} />
+                        <Text style={{ color: hintsRemaining > 0 ? '#fff' : '#888', fontWeight: 'bold', marginLeft: 5 }}>İpucu ({hintsRemaining})</Text>
+                    </TouchableOpacity>
+                </View>
 
                 <View style={{ alignItems: 'center' }}>
                     <Text style={{ color: combo > 1 ? '#FFD700' : '#444', fontSize: 14, fontWeight: 'bold' }}>COMBO</Text>

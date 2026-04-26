@@ -41,6 +41,8 @@ export default function PlacementTestScreen({ route, navigation }) {
             if (currentQuestion.id) setCorrectWordIds(prev => [...prev, currentQuestion.id]);
         }
 
+        const delay = option.is_correct ? 600 : 1500; // Yanlış cevapta doğruyu görmesi için biraz daha bekle
+
         setTimeout(() => {
             const isEndOfLevel = (currentIndex + 1) % 20 === 0;
             const currentLevelScore = scoreCard[currentLevel] + (option.is_correct ? 1 : 0);
@@ -62,7 +64,7 @@ export default function PlacementTestScreen({ route, navigation }) {
                 if (currentIndex < questions.length - 1) { setCurrentIndex(currentIndex + 1); setSelectedOption(null); }
                 else finishTest(currentLevel, currentLevelScore);
             }
-        }, 600);
+        }, delay);
     };
 
     const finishTest = async (level, finalLevelScore) => {
@@ -159,9 +161,13 @@ export default function PlacementTestScreen({ route, navigation }) {
                         style={[
                             styles.optionBtn,
                             { backgroundColor: theme.card, borderColor: theme.border },
-                            selectedOption === opt && (opt.is_correct
-                                ? { backgroundColor: theme.primaryLight, borderColor: theme.primary }
-                                : { backgroundColor: theme.dangerLight, borderColor: theme.danger })
+                            selectedOption ? (
+                                opt.is_correct 
+                                    ? { backgroundColor: theme.primaryLight, borderColor: theme.primary, borderWidth: 2 }
+                                    : (selectedOption === opt 
+                                        ? { backgroundColor: theme.dangerLight, borderColor: theme.danger, borderWidth: 2 }
+                                        : { opacity: 0.5 })
+                            ) : null
                         ]}
                         onPress={() => !selectedOption && handleAnswer(opt)}
                         activeOpacity={0.7}

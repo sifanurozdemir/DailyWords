@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Modal, ActivityIndicator, Alert } from 'react-native';
+import apiClient from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,10 @@ export default function StoryReaderScreen({ route, navigation }) {
     // Kart çevirme stateleri
     const [isFlipped, setIsFlipped] = useState(false);
     const flipAnim = useRef(new Animated.Value(0)).current;
+
+    // Kelime detayı
+    const [selectedWordDetails, setSelectedWordDetails] = useState(null);
+    const [isWordLoading, setIsWordLoading] = useState(false);
 
     useEffect(() => {
         // Metni noktalama işaretlerine göre cümlelere böl (virgül hariç)
@@ -116,7 +121,22 @@ export default function StoryReaderScreen({ route, navigation }) {
         outputRange: ['180deg', '360deg']
     });
 
-    const renderStoryText = (text) => {
+    const handleWordClick = async (word) => {
+        setIsWordLoading(true);
+        setSelectedWordDetails({ word_en: word }); // Gösterimi hemen aç
+        try {
+            // Sadece baştaki ve sondaki boşlukları temizle. a-zA-Z regexi "wonderful time" gibi boşluklu kelimeleri bozuyordu.
+            const cleanWord = word.trim().toLowerCase();
+            const res = await apiClient.get(`/get-word-by-en/${cleanWord}`);
+            setSelectedWordDetails(res.data);
+        } catch (e) {
+            setSelectedWordDetails({ word_en: word, error: 'Sözlük detayı bulunamadı.' });
+        } finally {
+            setIsWordLoading(false);
+        }
+    };
+
+    const renderStoryText = (text, isTurkish = false) => {
         if (!text) return null;
         
         const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -124,13 +144,33 @@ export default function StoryReaderScreen({ route, navigation }) {
         return parts.map((part, i) => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 const word = part.slice(2, -2);
+                
+                // Eğer Türkçe yüzündeysek tıklanmasını engelle, sadece renklendir
+                if (isTurkish) {
+                    return (
+                        <Text 
+                            key={i} 
+                            onPress={() => Alert.alert("Bilgi", "Lütfen kelime anlamı için İngilizce yüzüne dönün. Türkçe kelimeler sözlükte aratılamaz.")}
+                            style={{ fontWeight: 'bold', color: theme.primary, fontSize: 18 }}
+                        >
+                            {word}
+                        </Text>
+                    );
+                }
+
+                // İngilizce yüzündeysek tıklanabilir yap
                 return (
-                    <Text key={i} style={{ fontWeight: 'bold', color: theme.primary }}>
+                    <Text 
+                        key={i} 
+                        onPress={() => handleWordClick(word)} 
+                        suppressHighlighting={true}
+                        style={{ fontWeight: 'bold', color: theme.primary, fontSize: 18 }}
+                    >
                         {word}
                     </Text>
                 );
             }
-            return <Text key={i} style={{ color: theme.text }}>{part}</Text>;
+            return <Text key={i} style={{ color: theme.text, fontSize: 18 }}>{part}</Text>;
         });
     };
 
@@ -156,65 +196,111 @@ export default function StoryReaderScreen({ route, navigation }) {
                 </View>
             </View>
 
+            {/* Cümle İlerleme Çubuğu (Ses Kaydı Çubuğu) */}
+            <View style={styles.progressBarContainer}>
+                {[...Array(sentencesRef.current.length || 1)].map((_, i) => (
+                    <TouchableOpacity 
+                        key={i}
+                        style={[styles.progressSegment, { 
+                            backgroundColor: i < currentSentenceIndex ? theme.primary : (i === currentSentenceIndex ? theme.warning : theme.border),
+                        }]}
+                        onPress={() => {
+                            Speech.stop();
+                            setIsPlaying(true);
+                            isPlayingRef.current = true;
+                            setCurrentSentenceIndex(i);
+                            playNextSentence(i);
+                        }}
+                    />
+                ))}
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <Text style={[styles.title, { color: theme.text }]}>{story.title}</Text>
                 
-                {/* 3D Kart Çevirme Konteyneri */}
-                <TouchableOpacity activeOpacity={1} onPress={flipCard} style={{ perspective: 1000 }}>
-                    <View>
-                        {/* İngilizce (Ön Yüz) */}
-                        <Animated.View style={[
-                            styles.storyCard, 
-                            { 
-                                backgroundColor: theme.card, 
-                                borderColor: theme.border, 
-                                transform: [{rotateY: frontInterpolate}], 
-                                backfaceVisibility: 'hidden' 
-                            }
-                        ]}>
-                            <Text style={[styles.content, { color: theme.text }]}>
-                                {renderStoryText(story.content_en)}
-                            </Text>
-                            <View style={styles.flipHintContainer}>
-                                <Ionicons name="refresh" size={16} color={theme.textMuted} />
-                                <Text style={[styles.flipHint, { color: theme.textMuted }]}>
-                                    Çeviriyi görmek için karta dokun
-                                </Text>
-                            </View>
-                        </Animated.View>
+                {/* 3D Kart Çevirme Konteyneri (Sadece View, Touchable Değil) */}
+                <View style={{ perspective: 1000 }}>
+                    {/* İngilizce (Ön Yüz) */}
+                    <Animated.View 
+                        pointerEvents={isFlipped ? "none" : "auto"}
+                        style={[
+                        styles.storyCard, 
+                        { 
+                            backgroundColor: theme.card, 
+                            borderColor: theme.border, 
+                            transform: [{rotateY: frontInterpolate}], 
+                            backfaceVisibility: 'hidden' 
+                        }
+                    ]}>
+                        <Text style={[styles.content, { color: theme.text }]}>
+                            {renderStoryText(story.content_en, false)}
+                        </Text>
+                    </Animated.View>
 
-                        {/* Türkçe (Arka Yüz) */}
-                        <Animated.View style={[
-                            styles.storyCard, 
-                            { 
-                                backgroundColor: theme.primaryLight, 
-                                borderColor: theme.primary, 
-                                transform: [{rotateY: backInterpolate}], 
-                                backfaceVisibility: 'hidden',
-                                position: 'absolute',
-                                top: 0, left: 0, right: 0, bottom: 0 // Ön yüzün boyutunu tam kapla
-                            }
-                        ]}>
-                            <Text style={[styles.content, { color: theme.text }]}>
-                                {renderStoryText(story.content_tr || "Bu hikaye için henüz Türkçe çeviri bulunmuyor. Yeni bir tane üretin!")}
-                            </Text>
-                            <View style={styles.flipHintContainer}>
-                                <Ionicons name="language" size={16} color={theme.primary} />
-                                <Text style={[styles.flipHint, { color: theme.primary }]}>
-                                    İngilizceye dönmek için karta dokun
-                                </Text>
-                            </View>
-                        </Animated.View>
-                    </View>
+                    {/* Türkçe (Arka Yüz) */}
+                    <Animated.View 
+                        pointerEvents={isFlipped ? "auto" : "none"}
+                        style={[
+                        styles.storyCard, 
+                        { 
+                            backgroundColor: theme.primaryLight, 
+                            borderColor: theme.primary, 
+                            transform: [{rotateY: backInterpolate}], 
+                            backfaceVisibility: 'hidden',
+                            position: 'absolute',
+                            top: 0, left: 0, right: 0, bottom: 0 
+                        }
+                    ]}>
+                        <Text style={[styles.content, { color: theme.text }]}>
+                            {renderStoryText(story.content_tr || "Bu hikaye için henüz Türkçe çeviri bulunmuyor. Yeni bir tane üretin!", true)}
+                        </Text>
+                    </Animated.View>
+                </View>
+
+                {/* Yeni Çeviri Butonu */}
+                <TouchableOpacity onPress={flipCard} style={[styles.flipBtn, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Ionicons name="language" size={24} color={theme.primary} />
+                    <Text style={{ color: theme.text, fontWeight: 'bold', marginLeft: 10, fontSize: 16 }}>
+                        {isFlipped ? "İngilizce Orijinaline Dön" : "Hikayeyi Türkçeye Çevir"}
+                    </Text>
                 </TouchableOpacity>
 
                 <View style={styles.infoBox}>
                     <Ionicons name="information-circle-outline" size={20} color={theme.textSecondary} />
                     <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-                        Renkli ve kalın kelimeler, bu hafta öğrendiğin hedef kelimelerdir. Kartı çevirerek hikayenin Türkçesini de okuyabilirsin.
+                        Renkli ve kalın kelimeler hedef kelimelerdir. Üzerine tıklayarak kelimenin anlamına ve örnek cümlesine hızlıca bakabilirsin.
                     </Text>
                 </View>
             </ScrollView>
+
+            {/* Kelime Modal */}
+            <Modal visible={!!selectedWordDetails} transparent animationType="fade">
+                <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectedWordDetails(null)}>
+                    <View style={[styles.wordModal, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        {isWordLoading ? (
+                            <ActivityIndicator size="large" color={theme.primary} />
+                        ) : selectedWordDetails?.error ? (
+                            <View style={{ alignItems: 'center' }}>
+                                <Text style={[styles.modalWord, { color: theme.primary }]}>{selectedWordDetails.word_en}</Text>
+                                <Text style={{ color: theme.textSecondary, marginTop: 10 }}>{selectedWordDetails.error}</Text>
+                            </View>
+                        ) : (
+                            <>
+                                <Text style={[styles.modalWord, { color: theme.primary }]}>{selectedWordDetails?.word_en}</Text>
+                                <Text style={[styles.modalMeaning, { color: theme.text }]}>{selectedWordDetails?.meaning_tr}</Text>
+                                {selectedWordDetails?.example_en && (
+                                    <View style={{ marginTop: 15, padding: 12, backgroundColor: theme.background, borderRadius: 8, borderWidth: 1, borderColor: theme.border }}>
+                                        <Text style={{ color: theme.text, fontStyle: 'italic', fontSize: 15 }}>"{selectedWordDetails.example_en}"</Text>
+                                        {selectedWordDetails?.example_tr && (
+                                            <Text style={{ color: theme.textSecondary, marginTop: 8, fontSize: 13 }}>{selectedWordDetails.example_tr}</Text>
+                                        )}
+                                    </View>
+                                )}
+                            </>
+                        )}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 }
@@ -224,12 +310,17 @@ const styles = StyleSheet.create({
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
     playBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, elevation: 3 },
     restartBtn: { padding: 8, borderRadius: 20, borderWidth: 1, marginRight: 10, elevation: 1 },
+    progressBarContainer: { flexDirection: 'row', height: 6, paddingHorizontal: 20, marginBottom: 10 },
+    progressSegment: { flex: 1, marginHorizontal: 2, borderRadius: 3 },
     scrollContent: { padding: 20, paddingBottom: 50 },
     title: { fontSize: 28, fontWeight: '900', marginBottom: 20, textAlign: 'center' },
     storyCard: { padding: 20, borderRadius: 15, borderWidth: 1, elevation: 2, marginBottom: 25 },
-    content: { fontSize: 18, lineHeight: 28 },
+    content: { fontSize: 18, lineHeight: 30 },
+    flipBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 15, borderRadius: 15, borderWidth: 1, marginBottom: 25 },
     infoBox: { flexDirection: 'row', padding: 15, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 10, alignItems: 'center' },
     infoText: { flex: 1, marginLeft: 10, fontSize: 13, lineHeight: 18 },
-    flipHintContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, paddingTop: 15, borderTopWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
-    flipHint: { fontSize: 13, marginLeft: 5, fontWeight: 'bold' }
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+    wordModal: { padding: 25, borderRadius: 20, borderWidth: 1, elevation: 5 },
+    modalWord: { fontSize: 28, fontWeight: '900', marginBottom: 5 },
+    modalMeaning: { fontSize: 18, fontWeight: '600' }
 });

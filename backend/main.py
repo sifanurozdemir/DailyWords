@@ -237,6 +237,8 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "penalty_high_score": user.penalty_high_score or 0,
         "bug_hunt_total_xp": user.bug_hunt_total_xp or 0,
         "bug_hunt_high_score": user.bug_hunt_high_score or 0,
+        "swipe_match_total_xp": user.swipe_match_total_xp or 0,
+        "swipe_match_high_score": user.swipe_match_high_score or 0,
         "needs_placement_test": user.current_level is None
     }
 
@@ -257,6 +259,26 @@ def update_bughunt_stats(user_id: int, score: int, earned_xp: int, db: Session =
     
     db.commit()
     return {"status": "success", "bug_hunt_high_score": user.bug_hunt_high_score, "bug_hunt_total_xp": user.bug_hunt_total_xp}
+
+@app.post("/update-swipe-stats/{user_id}")
+def update_swipe_stats(user_id: int, score: int, earned_xp: int, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    
+    # Rekor kontrolü ve güncelleme
+    if score > (user.swipe_match_high_score or 0):
+        user.swipe_match_high_score = score
+        
+    # Toplam XP güncelleme
+    user.swipe_match_total_xp = (user.swipe_match_total_xp or 0) + earned_xp
+    
+    db.commit()
+    return {
+        "status": "success", 
+        "swipe_match_high_score": user.swipe_match_high_score, 
+        "swipe_match_total_xp": user.swipe_match_total_xp
+    }
 
 @app.get("/get-test-questions")
 def get_test_questions(db: Session = Depends(get_db)):
@@ -395,6 +417,13 @@ def get_review_words(user_id: int, db: Session = Depends(get_db)):
         })
     return result
 
+
+@app.get("/get-word-by-en/{word_en}")
+def get_word_by_en(word_en: str, db: Session = Depends(get_db)):
+    word = db.query(models.Word).filter(func.lower(models.Word.word_en) == word_en.lower()).first()
+    if not word:
+        raise HTTPException(status_code=404, detail="Kelime bulunamadı")
+    return word
 
 @app.post("/mark-word-learned/")
 def mark_word_learned(user_id: int, word_id: int, is_practice: bool = False, db: Session = Depends(get_db)):

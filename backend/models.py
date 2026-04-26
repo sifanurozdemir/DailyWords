@@ -40,6 +40,8 @@ class User(Base):
     penalty_high_score = Column(Integer, default=0)# Sadece penaltı gol rekoru
     bug_hunt_total_xp = Column(Integer, default=0) # Bug Hunt toplam XP'si
     bug_hunt_high_score = Column(Integer, default=0) # Bug Hunt rekoru
+    swipe_match_total_xp = Column(Integer, default=0) # Swipe Match toplam XP'si
+    swipe_match_high_score = Column(Integer, default=0) # Swipe Match rekoru
 
 class UserProgress(Base):
     __tablename__ = "user_progress"

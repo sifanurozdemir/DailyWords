@@ -1,0 +1,32 @@
+# --- GÜVENLİK VE ÖZEL DOSYALAR ---
+.env
+backend/.env
+frontend/.env
+şifreler.txt
+
+# --- BACKEND (PYTHON) GEREKSİZLERİ ---
+__pycache__/
+venv/
+*.pyc
+.pytest_cache/
+dailywords.db
+datasetKelime.xlsx
+assets/audio/
+src/assets/audio/
+**/assets/audio/*
+
+# --- FRONTEND (EXPO/JS) GEREKSİZLERİ ---
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+frontend/npm-debug.log*
+
+# --- İŞLETİM SİSTEMİ DOSYALARI ---
+.DS_Store
+Thumbs.db
+
+# --- VS CODE AYARLARI ---
+.vscode/
+frontend/.vscode/
+backend/.vscode/
+.idea/

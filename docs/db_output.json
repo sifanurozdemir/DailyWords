@@ -1,0 +1,135 @@
+{
+  "speech_attempts": [],
+  "words": [
+    {
+      "id": 35,
+      "word_en": "apple",
+      "phonetic": "/ˈæpl/"
+    },
+    {
+      "id": 213,
+      "word_en": "dog",
+      "phonetic": "/dɒɡ/"
+    },
+    {
+      "id": 784,
+      "word_en": "think",
+      "phonetic": "/θɪŋk/"
+    },
+    {
+      "id": 859,
+      "word_en": "weather",
+      "phonetic": "/ˈweðə(r)/"
+    },
+    {
+      "id": 887,
+      "word_en": "world",
+      "phonetic": "/wɜːld/"
+    }
+  ],
+  "user_stories": [
+    {
+      "id": 1,
+      "title": "Green Valley's Bright Future",
+      "content_en": "Green Valley faced a **dark** future. The changing **climate** made farming hard. A **reporter** arrived, planning an **analysis** of the town's struggle for **development**. He saw they barely had **electricity**. Lena, a **clever** young woman, knew they couldn't **live** like this. She wanted to **replace** the old power plant. Her idea was to **organize** a new project, powered by the sun. Her strong **friendship** with neighbors was key. Some feared a \"resource **war**\" in the past might **poison** their plans, but Lena kept a perfect **balance**. She needed to **clearly** show her vision to the **audience**. To raise money, they organized a **rugby** match, which became very **fashionable**. They would **use** new technology designed to **contain** enough energy for everyone.",
+      "content_tr": "Green Valley'yi **karanlık** bir gelecek bekliyordu. Değişen **iklim**, çiftçiliği zorlaştırıyordu. Bir **muhabir**, kasabanın **kalkınma** mücadelesini **analiz** etmek üzere geldi. Zar zor **elektrikleri** olduğunu gördü. **Zeki** genç bir kadın olan Lena, böyle **yaşayamayacaklarını** biliyordu. Eski enerji santralini **değiştirmek** istedi. Fikri, güneş enerjisiyle çalışan yeni bir proje **organize etmekti**. Komşularıyla olan güçlü **arkadaşlığı** anahtardı. Bazıları, geçmişteki bir \"kaynak **savaşı**\"nın planlarını **zehirleyebileceğinden** korkuyordu ama Lena mükemmel bir **denge** tutturdu. Vizyonunu **izleyiciye** **açıkça** göstermeliydi. Para toplamak için bir **ragbi** maçı düzenlediler, bu da çok **moda** oldu. Herkes için yeterli enerjiyi **içerecek** yeni teknolojiyi **kullanacaklardı**.",
+      "used_words": "[\"development\", \"friendship\", \"poison\", \"fashionable\", \"live\", \"analysis\", \"rugby\", \"war\", \"balance\", \"clearly\", \"dark\", \"clever\", \"climate\", \"audience\", \"replace\", \"use\", \"reporter\", \"electricity\", \"contain\", \"organize\"]"
+    },
+    {
+      "id": 2,
+      "title": "A Bright Idea",
+      "content_en": "Our city saw a new urban **development**. However, the old power plant couldn't **contain** the increased demand for **electricity**. One evening, the whole district went **dark**. A **reporter**, known for his **fashionable** fedoras, came for an **analysis**. He wanted to understand how people could **live** like this. My **friendship** group decided to **organize** a solution. We had a **clever** idea: **replace** the old system with solar energy. Our city's **climate** was perfect. Some felt it was a **war** against tradition, but we tried to **balance** opinions. We presented our plan **clearly** to a large **audience**. We had to **use** all our efforts. There was a fear it could **poison** the project if it failed. After a **rugby** game, we discussed final steps.",
+      "content_tr": "Şehrimiz yeni bir kentsel **gelişim** yaşadı. Ancak eski elektrik santrali artan **elektrik** talebini **içeremedi**. Bir akşam, tüm mahalle **karanlık** oldu. **Modaya uygun** şapkalarıyla tanınan bir **muhabir**, bir **analiz** için geldi. İnsanların böyle nasıl **yaşayabildiğini** anlamak istedi. Benim **arkadaşlık** grubum bir çözüm **organize etmeye** karar verdi. **Zekice** bir fikrimiz vardı: eski sistemi güneş enerjisiyle **değiştirmek**. Şehrimizin **iklimi** bunun için mükemmeldi. Bazıları bunun geleneğe karşı bir **savaş** olduğunu düşündü ama biz fikirleri **dengelemeye** çalıştık. Planımızı geniş bir **kitleye** **açıkça** sunduk. Tüm çabamızı **kullanmak** zorundaydık. Başarısız olursa projenin **zehirlenme** korkusu vardı. Bir **ragbi** maçından sonra son adımları tartıştık.",
+      "used_words": "[\"development\", \"friendship\", \"poison\", \"fashionable\", \"live\", \"analysis\", \"rugby\", \"war\", \"balance\", \"clearly\", \"dark\", \"clever\", \"climate\", \"audience\", \"replace\", \"use\", \"reporter\", \"electricity\", \"contain\", \"organize\"]"
+    },
+    {
+      "id": 3,
+      "title": "A Community's Balance",
+      "content_en": "In the small town of Oakhaven, a new **development** project was causing concern. The villagers feared it might **poison** their beautiful lake. A young, **clever** **reporter**, Alex, came to investigate. He wanted to **clearly** understand the situation. Alex noticed the **climate** of fear among the people. His old **friendship** with Tom, a local, helped him to **organize** meetings with the community. They needed a **balance** between progress and nature. Tom, a big **rugby** fan, believed teamwork was key. During his **analysis**, Alex discovered that the town's old power plant, which did not **use** enough green energy, was part of the problem. They needed to **replace** it. The new project could potentially **contain** solutions, but only if they planned it well. One evening, during a **dark** power outage (no **electricity**!), Alex saw the whole **audience** of concerned citizens **live** without power. He wrote an article, not about a **war** between people and development, but about finding a **fashionable** solution for the future.",
+      "content_tr": "Oakhaven kasabasında yeni bir **gelişim** projesi endişe yaratıyordu. Köylüler güzel göllerini **zehirleyebilir** diye korkuyordu. Genç, **zeki** bir **muhabir** olan Alex, durumu araştırmak için geldi. Durumu **açıkça** anlamak istedi. Alex insanlar arasındaki korku **iklimini** fark etti. Yerel halktan Tom ile olan eski **arkadaşlığı**, toplulukla toplantılar **organize etmesine** yardımcı oldu. İlerleme ve doğa arasında bir **dengeye** ihtiyaçları vardı. Büyük bir **ragbi** hayranı olan Tom, takım çalışmasının anahtar olduğuna inanıyordu. Yaptığı **analiz** sırasında Alex, kasabanın yeterince yeşil enerji **kullanmayan** eski enerji santralinin sorunun bir parçası olduğunu keşfetti. Onu **değiştirmeleri** gerekiyordu. Yeni proje potansiyel olarak çözümler **içerebilirdi**, ancak sadece iyi planlarlarsa. Bir akşam, **karanlık** bir elektrik kesintisi (hiç **elektrik** yoktu!) sırasında Alex, endişeli vatandaşlardan oluşan tüm **izleyici kitlesinin** güçsüz bir şekilde **yaşadığını** gördü. Bir **savaş** hakkında değil, geleceğe yönelik **modaya uygun** bir çözüm bulma hakkında bir makale yazdı.",
+      "used_words": "[\"development\", \"friendship\", \"poison\", \"fashionable\", \"live\", \"analysis\", \"rugby\", \"war\", \"balance\", \"clearly\", \"dark\", \"clever\", \"climate\", \"audience\", \"replace\", \"use\", \"reporter\", \"electricity\", \"contain\", \"organize\"]"
+    }
+  ],
+  "user_progress": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "word_id": 2539,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 2,
+      "user_id": 5,
+      "word_id": 5780,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 3,
+      "user_id": 5,
+      "word_id": 5937,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 4,
+      "user_id": 5,
+      "word_id": 5460,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 5,
+      "user_id": 5,
+      "word_id": 4968,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 6,
+      "user_id": 5,
+      "word_id": 4596,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 7,
+      "user_id": 5,
+      "word_id": 5350,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 8,
+      "user_id": 5,
+      "word_id": 5268,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 9,
+      "user_id": 5,
+      "word_id": 5439,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    },
+    {
+      "id": 10,
+      "user_id": 5,
+      "word_id": 5412,
+      "repetition_count": 0,
+      "interval": 1,
+      "ease_factor": 2.5
+    }
+  ]
+}

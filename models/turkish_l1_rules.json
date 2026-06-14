@@ -1,0 +1,258 @@
+[
+  {
+    "error_id": "TR_ERR_001",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Vowel Raising (/æ/ to /e/)",
+    "target_fonem": "æ",
+    "detected_fonem": "e",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": false,
+    "feedback_tr": "Açık 'a' (/æ/) sesi yerine daha kapalı ve yüksek olan Türkçe 'e' (/e/) sesini çıkardınız. Bu telaffuz hatasını düzeltmek için çenenizi normalden biraz daha aşağı indirin, dilinizi ağzınızın tabanında yayvan tutun ve dudak kenarlarınızı hafifçe kulaklarınıza doğru çekerek genişçe gülümser bir pozisyonda 'a' sesi çıkarın.",
+    "backtracking_logic": {
+      "feedback_tr": "Açık 'a' (/æ/) sesi yerine daha kapalı ve yüksek olan Türkçe 'e' (/e/) sesini çıkardınız. Bu telaffuz hatasını düzeltmek için çenenizi normalden biraz daha aşağı indirin, dilinizi ağzınızın tabanında yayvan tutun ve dudak kenarlarınızı hafifçe kulaklarınıza doğru çekerek genişçe gülümser bir pozisyonda 'a' sesi çıkarın.",
+      "severity": "High (Fossilized Error / Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_002",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Final Devoicing (Kelime Sonu Tonsuzlaşması)",
+    "target_fonem": "d",
+    "detected_fonem": "t",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "feedback_tr": "Kelime sonundaki ötümlü/tonlu (voiced) ünsüzü (/d/) Türkçe sesbilgisi etkisiyle ötümsüzleştirerek (/t/) telaffuz ettiniz. İngilizcede kelime sonundaki ötümlü seslerin korunması 'sad' ve 'sat' örneklerinde olduğu gibi kelime anlamını değiştirebilir. Dilinizi üst diş etine yerleştirdiğinizde nefesinizi aniden kesip bırakmak yerine, ses tellerinizin titreşimini kelimenin son anına kadar korumaya özen gösterin.",
+    "backtracking_logic": {
+      "feedback_tr": "Kelime sonundaki ötümlü/tonlu (voiced) ünsüzü (/d/) Türkçe sesbilgisi etkisiyle ötümsüzleştirerek (/t/) telaffuz ettiniz. İngilizcede kelime sonundaki ötümlü seslerin korunması 'sad' ve 'sat' örneklerinde olduğu gibi kelime anlamını değiştirebilir. Dilinizi üst diş etine yerleştirdiğinizde nefesinizi aniden kesip bırakmak yerine, ses tellerinizin titreşimini kelimenin son anına kadar korumaya özen gösterin.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_003",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Labiodental/Bilabial Fricative/Approximant Substitution (V-W Karışıklığı)",
+    "target_fonem": "w",
+    "detected_fonem": "v",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": false,
+    "feedback_tr": "Yarı-ünlü 'w' (/w/) sesi yerine üst dişleri alt dudağa değdirerek çıkardığımız sürtüşmeli 'v' (/v/) sesini çıkardınız. 'w' sesini doğru üretmek için üst dişlerinizi alt dudağınıza kesinlikle değdirmeyin. Bunun yerine dudaklarınızı öne doğru uzatarak adeta ıslık çalacakmış gibi büzün ve havayı bu yuvarlak açıklıktan serbestçe üfleyin.",
+    "backtracking_logic": {
+      "feedback_tr": "Yarı-ünlü 'w' (/w/) sesi yerine üst dişleri alt dudağa değdirerek çıkardığımız sürtüşmeli 'v' (/v/) sesini çıkardınız. 'w' sesini doğru üretmek için üst dişlerinizi alt dudağınıza kesinlikle değdirmeyin. Bunun yerine dudaklarınızı öne doğru uzatarak adeta ıslık çalacakmış gibi büzün ve havayı bu yuvarlak açıklıktan serbestçe üfleyin.",
+      "severity": "High (Fossilized Error)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_004",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Interdental to Alveolar Stop (Peltek TH Sesinin Düzleşmesi)",
+    "target_fonem": "θ",
+    "detected_fonem": "t",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "feedback_tr": "Peltek sürtüşmeli 'th' (/θ/) sesi yerine düz bir patlamalı 't' (/t/) sesi çıkardınız. Bu hatayı önlemek için dilinizin ucunu üst ve alt ön dişlerinizin arasına hafifçe yerleştirin (dil ucu dışarıdan görünmelidir). Havayı dişlerinizi tamamen kapatmadan, dilinizin üzerinden sızdırarak ve üfleyerek dışarı verin, dilinizi dişlerinizin arkasına çekip patlatmayın.",
+    "backtracking_logic": {
+      "feedback_tr": "Peltek sürtüşmeli 'th' (/θ/) sesi yerine düz bir patlamalı 't' (/t/) sesi çıkardınız. Bu hatayı önlemek için dilinizin ucunu üst ve alt ön dişlerinizin arasına hafifçe yerleştirin (dil ucu dışarıdan görünmelidir). Havayı dişlerinizi tamamen kapatmadan, dilinizin üzerinden sızdırarak ve üfleyerek dışarı verin, dilinizi dişlerinizin arkasına çekip patlatmayın.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_005",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Voiced Interdental Stopping (Ötümlü Peltek TH Sesinin Düzleşmesi)",
+    "target_fonem": "ð",
+    "detected_fonem": "d",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "feedback_tr": "Ötümlü peltek 'th' (/ð/) sesi yerine düz bir 'd' (/d/) veya 'z' (/z/) sesi çıkardınız. Doğru telaffuz için dilinizin ucunu ön dişlerinizin arasına hafifçe yerleştirip sıkıştırın. Gırtlağınızdaki ses tellerini titreterek (arı vızıltısına benzer şekilde) nefesinizi dil ve diş arasından sızdırarak sesi üretin.",
+    "backtracking_logic": {
+      "feedback_tr": "Ötümlü peltek 'th' (/ð/) sesi yerine düz bir 'd' (/d/) veya 'z' (/z/) sesi çıkardınız. Doğru telaffuz için dilinizin ucunu ön dişlerinizin arasına hafifçe yerleştirip sıkıştırın. Gırtlağınızdaki ses tellerini titreterek (arı vızıltısına benzer şekilde) nefesinizi dil ve diş arasından sızdırarak sesi üretin.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_006",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Alveolar Tap R Substitution (Çarpmalı Türkçe R)",
+    "target_fonem": "ɹ",
+    "detected_fonem": "ɾ",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": false,
+    "feedback_tr": "İngilizcedeki süzücü 'r' (/ɹ/) sesi yerine dil ucunu damak ardına çarptırarak Türkçe 'r' (/ɾ/) sesini çıkardınız. Doğru telaffuz için dilinizin ucunu üst damağınıza kesinlikle dokundurmayın. Dil kenarlarını üst azı dişlerinize yaslayıp dil ucunu geriye, damağa doğru hafifçe kıvırın ve damakla dil arasında kalan boşluktan havayı akıtın.",
+    "backtracking_logic": {
+      "feedback_tr": "İngilizcedeki süzücü 'r' (/ɹ/) sesi yerine dil ucunu damak ardına çarptırarak Türkçe 'r' (/ɾ/) sesini çıkardınız. Doğru telaffuz için dilinizin ucunu üst damağınıza kesinlikle dokundurmayın. Dil kenarlarını üst azı dişlerinize yaslayıp dil ucunu geriye, damağa doğru hafifçe kıvırın ve damakla dil arasında kalan boşluktan havayı akıtın.",
+      "severity": "High (Fossilized Error)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_007",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Vowel Shortening (Uzun Ünlülerin Kısaltılması)",
+    "target_fonem": "iː",
+    "detected_fonem": "i",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": false,
+    "feedback_tr": "İngilizcedeki uzun 'ee' (/iː/) sesini Türkçe'deki kısa 'i' (/i/) gibi çok kısa sürede telaffuz ettiniz. Bu sesin uzunluğunu korumak için dilinizin arkasını damağınıza yakın tutarak ses süresini yaklaşık iki kat uzatın (örneğin 'sheep' ile 'ship' arasındaki farkı korumak için).",
+    "backtracking_logic": {
+      "feedback_tr": "İngilizcedeki uzun 'ee' (/iː/) sesini Türkçe'deki kısa 'i' (/i/) gibi çok kısa sürede telaffuz ettiniz. Bu sesin uzunluğunu korumak için dilinizin arkasını damağınıza yakın tutarak ses süresini yaklaşık iki kat uzatın (örneğin 'sheep' ile 'ship' arasındaki farkı korumak için).",
+      "severity": "High (Fossilized Error)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_008",
+    "error_layer": "SUPRASEGMENTAL",
+    "error_name": "Word Stress Displacement (Kelime Vurgusu Kayması)",
+    "target_fonem": "",
+    "detected_fonem": "",
+    "detection_method": {
+      "primary": "energy_pattern",
+      "wav2vec2_detectable": false,
+      "dtw_detectable": true
+    },
+    "veto_triggered": false,
+    "feedback_tr": "Kelime vurgusunu yanlış heceye yerleştirdiniz. Türkçe ana dil alışkanlığıyla kelimenin son hecesini vurgulamak yerine, kelimenin asıl vurgulanması gereken (primer hecesinde) ses tonunuzun perdesini yükseltin, heceyi daha uzun ve daha yüksek ses enerjisiyle (gür) seslendirin.",
+    "backtracking_logic": {
+      "feedback_tr": "Kelime vurgusunu yanlış heceye yerleştirdiniz. Türkçe ana dil alışkanlığıyla kelimenin son hecesini vurgulamak yerine, kelimenin asıl vurgulanması gereken (primer hecesinde) ses tonunuzun perdesini yükseltin, heceyi daha uzun ve daha yüksek ses enerjisiyle (gür) seslendirin.",
+      "severity": "Medium"
+    }
+  },
+  {
+    "error_id": "TR_ERR_009",
+    "error_layer": "PROSODIC",
+    "error_name": "Flat Intonation (Monoton Konuşma Ezgisi)",
+    "target_fonem": "",
+    "detected_fonem": "",
+    "detection_method": {
+      "primary": "dtw_rhythm",
+      "wav2vec2_detectable": false,
+      "dtw_detectable": true
+    },
+    "veto_triggered": false,
+    "feedback_tr": "Konuşma ritminde monoton/düz bir ezgi (intonation) kullandınız. İngilizce hece-zamanlı (syllable-timed) değil, vurgu-zamanlı (stress-timed) bir dildir. Cümledeki veya kelimedeki vurgusuz heceleri daha hızlı ve zayıf (schwa /ə/ sesiyle) geçiştirirken, vurgulu hecelerin süresini uzatmalı ve ses perdenizi dalgalandırmalısınız.",
+    "backtracking_logic": {
+      "feedback_tr": "Konuşma ritminde monoton/düz bir ezgi (intonation) kullandınız. İngilizce hece-zamanlı (syllable-timed) değil, vurgu-zamanlı (stress-timed) bir dildir. Cümledeki veya kelimedeki vurgusuz heceleri daha hızlı ve zayıf (schwa /ə/ sesiyle) geçiştirirken, vurgulu hecelerin süresini uzatmalı ve ses perdenizi dalgalandırmalısınız.",
+      "severity": "Medium"
+    }
+  },
+  {
+    "error_id": "TR_ERR_010",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Vowel Epenthesis (Epentez / Ünlü Türemesi)",
+    "target_fonem": "sp",
+    "detected_fonem": "isp",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": false,
+    "feedback_tr": "Kelime başındaki ünsüz kümesinin (consonant cluster) önüne Türkçe hece yapısından kaynaklı olarak fazladan bir ünlü harf (/i/ veya /ı/) eklediniz (Örn: 'speak' -> 'ispeak'). 's' harfini söylerken doğrudan ıslık sesiyle başlayın, öncesinde ses tellerinizi titreştirerek ünlü bir ses çıkarmamaya özen gösterin.",
+    "backtracking_logic": {
+      "feedback_tr": "Kelime başındaki ünsüz kümesinin (consonant cluster) önüne Türkçe hece yapısından kaynaklı olarak fazladan bir ünlü harf (/i/ veya /ı/) eklediniz (Örn: 'speak' -> 'ispeak'). 's' harfini söylerken doğrudan ıslık sesiyle başlayın, öncesinde ses tellerinizi titreştirerek ünlü bir ses çıkarmamaya özen gösterin.",
+      "severity": "High (Fossilized Error / Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_011",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Final Plosive Deletion (Kelime Sonu /t/ Yutulması)",
+    "target_fonem": "t",
+    "detected_fonem": "",
+    "detection_method": {
+      "primary": "phoneme_deletion",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "veto_ceiling": 35,
+    "feedback_tr": "Kelime sonundaki /t/ sesini yuttunuz. İngilizcede kelime sonu ünsüzlerinin korunması anlam ayırt edicidir. Nefesinizi keserken dil ucunu üst diş etine hafifçe vurarak patlamayı hissettirin.",
+    "backtracking_logic": {
+      "feedback_tr": "Kelime sonundaki /t/ sesini yuttunuz.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_012",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Final Voiced Deletion (Kelime Sonu /d/ Yutulması)",
+    "target_fonem": "d",
+    "detected_fonem": "",
+    "detection_method": {
+      "primary": "phoneme_deletion",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "veto_ceiling": 35,
+    "feedback_tr": "Kelime sonundaki /d/ sesini yuttunuz. Ses tellerinizin titreşimini kelimenin sonuna kadar koruyarak dil ucunu üst diş etine bastırın.",
+    "backtracking_logic": {
+      "feedback_tr": "Kelime sonundaki /d/ sesini yuttunuz.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_013",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Interdental to Alveolar Fricative (/θ/ → /s/)",
+    "target_fonem": "θ",
+    "detected_fonem": "s",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "veto_ceiling": 28,
+    "feedback_tr": "Peltek /θ/ sesi yerine /s/ çıkardınız. Dil ucunuzu üst ve alt ön dişlerinizin arasına yerleştirip havayı dil üzerinden sızdırın.",
+    "backtracking_logic": {
+      "feedback_tr": "Peltek /θ/ yerine /s/ sesi tespit edildi.",
+      "severity": "Critical (Veto Rule)"
+    }
+  },
+  {
+    "error_id": "TR_ERR_014",
+    "error_layer": "SEGMENTAL",
+    "error_name": "Voiced Interdental to Fricative (/ð/ → /z/)",
+    "target_fonem": "ð",
+    "detected_fonem": "z",
+    "detection_method": {
+      "primary": "phoneme_substitution",
+      "wav2vec2_detectable": true,
+      "dtw_detectable": false
+    },
+    "veto_triggered": true,
+    "veto_ceiling": 28,
+    "feedback_tr": "Ötümlü peltek /ð/ sesi yerine /z/ çıkardınız. Dil ucunu dişlerin arasına yerleştirip ses tellerini titreştirerek sesi üretin.",
+    "backtracking_logic": {
+      "feedback_tr": "Ötümlü peltek /ð/ yerine /z/ sesi tespit edildi.",
+      "severity": "Critical (Veto Rule)"
+    }
+  }
+]

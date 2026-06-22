@@ -9,6 +9,8 @@
 Yapay zeka destekli, **fonem (ses birimi) seviyesinde** İngilizce telaffuz analizi yapabilen, mikro öğrenme ve aralıklı tekrar (SRS) algoritmalarıyla donatılmış yeni nesil bir dil öğrenme platformudur. 
 
 Bu proje; istemci tarafında modern bir **React Native (Expo)** mobil uygulama, sunucu tarafında ise gelişmiş sinyal işleme ve yapay zeka modelleri barındıran **FastAPI (Python)** servisinden oluşmaktadır.
+loom demo videosu: https://www.loom.com/share/82fd60bd7a074f969ce136e477a07f2d
+
 
 ---
 
